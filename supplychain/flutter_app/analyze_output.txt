@@ -1,0 +1,16 @@
+﻿Analyzing flutter_app...                                        
+
+  error - Undefined name '_sortColumn' - lib\widgets\components\inventory_table.dart:102:29 - undefined_identifier
+  error - Undefined name '_sortAscending' - lib\widgets\components\inventory_table.dart:103:29 - undefined_identifier
+
+flutter : 2 issues found. (ran in 2.2s)
+At line:1 char:1
++ flutter analyze --no-fatal-infos 2>&1 | 
+Out-File -FilePath analyze_ou ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified 
+   : (2 issues found. (ran in 2.2s):Strin  
+  g) [], RemoteException
+    + FullyQualifiedErrorId : NativeComman 
+   dError
+ 
