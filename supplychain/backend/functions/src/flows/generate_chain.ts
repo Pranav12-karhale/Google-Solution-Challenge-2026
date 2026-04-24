@@ -22,41 +22,73 @@ const ai = genkit({
 });
 
 const PRIORITIZED_MODELS = [
-  'googleai/gemini-3.1-pro',
   'googleai/gemini-2.5-flash',
+  'googleai/gemini-2.5-flash-lite',
   'googleai/gemini-1.5-flash',
 ];
 
+// Hard timeout (seconds) for the entire fallback loop
+const OVERALL_TIMEOUT_MS = 30_000;
+// Max delay we'll ever wait for a single retry
+const MAX_RETRY_DELAY_MS = 5_000;
+
 /**
- * Helper to attempt generation with multiple models in order of priority
+ * Helper to attempt generation with multiple models in order of priority.
+ * Designed to fail fast: caps delays, skips rate-limited models immediately
+ * (quota is project-wide, so waiting won't help), and enforces a hard timeout.
  */
 async function generateWithFallback<T extends z.ZodTypeAny>(options: {
   prompt: string;
   outputSchema: T;
 }) {
   let lastError: any;
-  
+  const deadline = Date.now() + OVERALL_TIMEOUT_MS;
+
   for (const model of PRIORITIZED_MODELS) {
+    // Check hard timeout
+    if (Date.now() >= deadline) {
+      console.warn(`   ⏰ Overall timeout reached (${OVERALL_TIMEOUT_MS / 1000}s). Giving up on AI.`);
+      break;
+    }
+
     try {
-      console.log(`   📡 Attempting generation with model: ${model}...`);
+      console.log(`   📡 Trying model: ${model}...`);
       const { output } = await ai.generate({
         model,
         prompt: options.prompt,
         output: { schema: options.outputSchema },
         config: model.includes('3.1-pro') ? { thinkingLevel: 'high' } : {},
       });
-      
+
       if (output) {
-        console.log(`   ✅ Successful generation with: ${model}`);
+        console.log(`   ✅ Success with: ${model}`);
         return output;
       }
     } catch (error: any) {
       lastError = error;
-      console.warn(`   ⚠️ Model ${model} unavailable (${error.message?.substring(0, 50)}...). Trying next...`);
+      const msg = error.message || String(error);
+      console.warn(`   ⚠️ ${model} failed: ${msg.substring(0, 80)}...`);
+
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+        // Quota is project-wide on free tier — waiting won't help, skip to next model
+        console.log(`   ⏭️ Rate limited (project-wide quota). Skipping to next model...`);
+        continue;
+      }
+
+      if (msg.includes('503')) {
+        // Server overloaded — wait briefly then try next model
+        const delayMs = Math.min(MAX_RETRY_DELAY_MS, 3000);
+        console.log(`   ⏳ Server overloaded, waiting ${delayMs}ms then trying next...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      // Any other error (404 model not found, etc.) — skip immediately
+      console.log(`   ⏭️ Non-retryable error, trying next model...`);
     }
   }
-  
-  throw new Error(`All models failed to generate content. Last error: ${lastError?.message}`);
+
+  throw new Error(`All models failed. Last error: ${lastError?.message || lastError}`);
 }
 
 // ============================================================
@@ -245,21 +277,23 @@ export const generateSupplyChainFlow = ai.defineFlow(
       analysis,
     });
 
-    // Step 3: Generate UI configs for each node
-    const nodesWithUI = await Promise.all(
-      architecture.nodes.map(async (node) => {
-        const uiConfig = await generateUIConfigFlow({
-          node,
-          analysis,
-        });
+    // Step 3: Generate UI configs for each node SEQUENTIALLY to avoid rate limits
+    const nodesWithUI = [];
+    for (const node of architecture.nodes) {
+      // Add slight delay between requests just to be safe
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const uiConfig = await generateUIConfigFlow({
+        node,
+        analysis,
+      });
 
-        return {
-          ...node,
-          status: 'active' as const,
-          ui_config: uiConfig,
-        };
-      })
-    );
+      nodesWithUI.push({
+        ...node,
+        status: 'active' as const,
+        ui_config: uiConfig,
+      });
+    }
 
     // Step 4: Assemble the complete supply chain
     const supplyChain: SupplyChain = {

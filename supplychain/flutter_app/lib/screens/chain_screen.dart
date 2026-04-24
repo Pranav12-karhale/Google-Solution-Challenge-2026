@@ -689,6 +689,28 @@ class _ChainScreenState extends State<ChainScreen> with TickerProviderStateMixin
       'show_chart': Icons.show_chart,
       'pie_chart': Icons.pie_chart,
       'assignment': Icons.assignment,
+      // New icons for expanded chains
+      'flight': Icons.flight,
+      'gavel': Icons.gavel,
+      'security': Icons.security,
+      'recycling': Icons.recycling,
+      'directions_boat': Icons.directions_boat,
+      'support_agent': Icons.support_agent,
+      'storefront': Icons.storefront,
+      'compost': Icons.compost,
+      'restaurant': Icons.restaurant,
+      'biotech': Icons.biotech,
+      'local_pharmacy': Icons.local_pharmacy,
+      'medication': Icons.medication,
+      'category': Icons.category,
+      'developer_board': Icons.developer_board,
+      'build_circle': Icons.build_circle,
+      'landscape': Icons.landscape,
+      'battery_charging_full': Icons.battery_charging_full,
+      'settings': Icons.settings,
+      'health_and_safety': Icons.health_and_safety,
+      'train': Icons.train,
+      'store': Icons.store,
     };
     return iconMap[iconName] ?? Icons.circle_outlined;
   }

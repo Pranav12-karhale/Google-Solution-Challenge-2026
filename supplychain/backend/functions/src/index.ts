@@ -1,14 +1,75 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import admin from 'firebase-admin';
 import { generateMockSupplyChain } from './utils/mock_data.js';
 import type { SupplyChain } from './schemas/supply_chain_schema.js';
 
 dotenv.config();
 
+// ── Firebase Admin initialization ────────────────────────────────
+// Uses Application Default Credentials (ADC) or GOOGLE_APPLICATION_CREDENTIALS
+try {
+  admin.initializeApp({
+    // If running locally without ADC, it initializes with limited functionality
+    // Auth verification still works if the project ID is set
+    projectId: process.env.FIREBASE_PROJECT_ID || undefined,
+  });
+  console.log('🔐 Firebase Admin initialized');
+} catch (err: any) {
+  console.warn('⚠️  Firebase Admin init failed:', err.message);
+  console.warn('   Auth middleware will pass through (dev mode)');
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ── Auth Middleware ───────────────────────────────────────────────
+// Verifies Firebase ID tokens from the Authorization header.
+// Skips verification for /api/health (public endpoint).
+// In dev mode (no Firebase project), passes through all requests.
+const authMiddleware = async (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) => {
+  // Allow health check without auth
+  if (req.path === '/api/health') {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+
+  // If no auth header, check if Firebase is configured
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // In dev mode (no Firebase project), allow unauthenticated access
+    if (!process.env.FIREBASE_PROJECT_ID) {
+      return next();
+    }
+    res.status(401).json({ error: 'Missing or invalid authorization token' });
+    return;
+  }
+
+  const token = authHeader.split('Bearer ')[1];
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    // Attach uid to request for per-user data access
+    (req as any).uid = decoded.uid;
+    (req as any).userEmail = decoded.email;
+    next();
+  } catch (err: any) {
+    // If Firebase Admin isn't properly initialized, pass through
+    if (!process.env.FIREBASE_PROJECT_ID) {
+      return next();
+    }
+    console.warn('🔒 Auth failed:', err.message);
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+app.use(authMiddleware);
 
 // In-memory store (simulates Firestore)
 const supplyChains: Map<string, SupplyChain> = new Map();
@@ -32,9 +93,15 @@ app.post('/api/generate', async (req, res) => {
     let chain: SupplyChain;
 
     if (USE_AI) {
-      // Dynamic import to avoid loading Genkit when not needed
-      const { generateSupplyChainFlow } = await import('./flows/generate_chain.js');
-      chain = await generateSupplyChainFlow({ businessIdea });
+      try {
+        // Dynamic import to avoid loading Genkit when not needed
+        const { generateSupplyChainFlow } = await import('./flows/generate_chain.js');
+        chain = await generateSupplyChainFlow({ businessIdea });
+      } catch (err: any) {
+        console.warn(`\n⚠️ AI Generation completely failed (${err.message}).`);
+        console.warn(`   Falling back to Mock Data to prevent frontend block...\n`);
+        chain = generateMockSupplyChain(businessIdea);
+      }
     } else {
       // Simulate AI processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));

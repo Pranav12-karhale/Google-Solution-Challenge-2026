@@ -19,9 +19,12 @@ dependencies:
   flutter_staggered_animations: ^1.1.1
   intl: ^0.20.0
   firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  google_sign_in: ^6.2.0
   cloud_firestore: ^6.2.0
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:

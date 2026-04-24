@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "327127186487",
+    "project_id": "supply-chain-gen-man",
+    "storage_bucket": "supply-chain-gen-man.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:327127186487:android:66116d0c82e22ac44713b2",
+        "android_client_info": {
+          "package_name": "com.supplychain.adaptive_supply_chain"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCyLtu5pNq1PpdaCEGqpaI11BA7TOqli80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

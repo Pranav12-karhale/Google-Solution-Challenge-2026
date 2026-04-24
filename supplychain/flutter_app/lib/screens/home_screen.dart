@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../providers/auth_provider.dart';
 import '../providers/supply_chain_provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -91,6 +92,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      // User greeting bar
+                      _buildUserBar(context),
+                      const SizedBox(height: 24),
                       // Logo/Brand
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -314,11 +318,85 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _generate(SupplyChainProvider provider) async {
-    await provider.generateChain(_ideaController.text.trim());
-    if (provider.currentChain != null && mounted) {
-      Navigator.of(context).pushReplacementNamed('/chain');
-    }
+  Widget _buildUserBar(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: AppTheme.glassGradient,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppTheme.accentBlue.withAlpha(40),
+            backgroundImage: auth.photoUrl != null
+                ? NetworkImage(auth.photoUrl!)
+                : null,
+            child: auth.photoUrl == null
+                ? Text(
+                    auth.displayName[0].toUpperCase(),
+                    style: const TextStyle(
+                      color: AppTheme.accentBlue,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome, ${auth.displayName}',
+                  style: GoogleFonts.inter(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (auth.email != null)
+                  Text(
+                    auth.email!,
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => auth.signOut(),
+            icon: const Icon(Icons.logout, size: 18),
+            tooltip: 'Sign out',
+            style: IconButton.styleFrom(
+              foregroundColor: AppTheme.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _generate(SupplyChainProvider provider) {
+    final idea = _ideaController.text.trim();
+    if (idea.isEmpty) return;
+    Navigator.of(context).pushReplacementNamed(
+      '/generating',
+      arguments: {'businessIdea': idea},
+    );
   }
 }
 
