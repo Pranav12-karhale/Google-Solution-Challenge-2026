@@ -158,6 +158,17 @@ export const MitigationActionSchema = z.object({
 });
 
 // ============================================================
+// Anticipated Risks (Agent 1.5 - Pre-generation)
+// ============================================================
+
+export const AnticipatedRiskSchema = z.object({
+  risk_category: z.string().describe('Category of the risk based on the disruption playbook'),
+  description: z.string().describe('Detailed description of the anticipated risk'),
+  regions_to_avoid: z.array(z.string()).describe('Geographic regions or countries that should be actively avoided in routing'),
+  recommended_routing_strategy: z.string().describe('Specific instruction on how the supply chain should be structured to avoid this risk'),
+});
+
+// ============================================================
 // Business Analysis Output (Agent 1)
 // ============================================================
 
@@ -212,6 +223,7 @@ export type Edge = z.infer<typeof EdgeSchema>;
 export type SupplyChain = z.infer<typeof SupplyChainSchema>;
 export type DisruptionEvent = z.infer<typeof DisruptionEventSchema>;
 export type MitigationAction = z.infer<typeof MitigationActionSchema>;
+export type AnticipatedRisk = z.infer<typeof AnticipatedRiskSchema>;
 export type BusinessAnalysis = z.infer<typeof BusinessAnalysisSchema>;
 export type NodeRiskDetail = z.infer<typeof NodeRiskDetailSchema>;
 export type RiskScanResult = z.infer<typeof RiskScanResultSchema>;

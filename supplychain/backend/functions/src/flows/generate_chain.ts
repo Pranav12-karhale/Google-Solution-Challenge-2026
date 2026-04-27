@@ -8,10 +8,12 @@ import {
   NodeUIConfigSchema,
   PageComponentSchema,
   NodeType,
+  AnticipatedRiskSchema,
   type SupplyChain,
   type BusinessAnalysis,
 } from '../schemas/supply_chain_schema.js';
 import { v4 as uuidv4 } from 'uuid';
+import { DISRUPTION_PLAYBOOK } from './disruption_playbook.js';
 
 // ============================================================
 // Initialize Genkit with Google AI (Gemini)
@@ -169,6 +171,53 @@ Be specific and practical. Think about real-world logistics.`,
 );
 
 // ============================================================
+// Agent 1.5: Risk Anticipator
+// Anticipates risks before generating the chain
+// ============================================================
+
+const anticipateRisksFlow = ai.defineFlow(
+  {
+    name: 'anticipateRisks',
+    inputSchema: z.object({
+      businessIdea: z.string(),
+      analysis: BusinessAnalysisSchema,
+      clientLocation: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        address: z.string(),
+      }).optional(),
+    }),
+    outputSchema: z.object({
+      anticipated_risks: z.array(AnticipatedRiskSchema),
+    }),
+  },
+  async (input) => {
+    const locationContext = input.clientLocation
+      ? `\nClient Location: ${input.clientLocation.address} (Lat: ${input.clientLocation.lat}, Lng: ${input.clientLocation.lng})`
+      : '';
+
+    return await generateWithFallback({
+      prompt: `You are a predictive supply chain risk analyst. Based on the following business analysis, anticipate major supply chain risks from our playbook BEFORE the supply chain is even built.
+
+Business Idea: "${input.businessIdea}"${locationContext}
+
+Analysis:
+- Industry: ${input.analysis.industry}
+- Product Type: ${input.analysis.product_type}
+- Target Market: ${input.analysis.target_market}
+
+Playbook Categories to consider:
+${DISRUPTION_PLAYBOOK}
+
+Identify the top 1-3 macro risks (e.g., geopolitical conflicts, major climate zones to avoid, chronic transport bottlenecks).
+Provide specific "regions_to_avoid" (e.g., "Red Sea", "Taiwan", "Eastern Europe") and a "recommended_routing_strategy".
+If the business is strictly local or hyper-simple, you may return an empty list or minimal risks.`,
+      outputSchema: z.object({ anticipated_risks: z.array(AnticipatedRiskSchema) }),
+    });
+  }
+);
+
+// ============================================================
 // Agent 2: Chain Architect
 // Designs the node graph with proper relationships
 // ============================================================
@@ -179,6 +228,7 @@ const architectChainFlow = ai.defineFlow(
     inputSchema: z.object({
       businessIdea: z.string(),
       analysis: BusinessAnalysisSchema,
+      anticipatedRisks: z.array(AnticipatedRiskSchema).optional(),
       clientLocation: z.object({
         lat: z.number(),
         lng: z.number(),
@@ -227,10 +277,14 @@ const architectChainFlow = ai.defineFlow(
       ? `\nClient Location: ${input.clientLocation.address} (Lat: ${input.clientLocation.lat}, Lng: ${input.clientLocation.lng})\nStrict Local Sourcing: ${input.strictLocal ? 'YES - MUST use businesses very close to these coordinates' : 'Preferred'}`
       : '';
 
+    const risksContext = (input.anticipatedRisks && input.anticipatedRisks.length > 0)
+      ? `\n\nANTICIPATED RISKS TO AVOID:\n${input.anticipatedRisks.map(r => `- ${r.risk_category}: ${r.description}\n  Must Avoid: ${r.regions_to_avoid.join(', ')}\n  Strategy: ${r.recommended_routing_strategy}`).join('\n')}\n\nCRITICAL ROUTING INSTRUCTION: You MUST actively avoid the 'Must Avoid' regions mentioned above and follow the 'Strategy' when placing nodes.`
+      : '';
+
     return await generateWithFallback({
       prompt: `You are a supply chain architect. Based on the following business analysis, design a complete supply chain node graph.
 
-Business Idea: "${input.businessIdea}"${locationContext}
+Business Idea: "${input.businessIdea}"${locationContext}${risksContext}
 
 Analysis:
 - Industry: ${input.analysis.industry}
@@ -358,10 +412,20 @@ export const generateSupplyChainFlow = ai.defineFlow(
       strictLocal: input.strictLocal,
     });
 
+    // Step 1.5: Anticipate Risks
+    console.log(`   🔮 Anticipating risks for: ${input.businessIdea}...`);
+    const anticipatedRisksResponse = await anticipateRisksFlow({
+      businessIdea: input.businessIdea,
+      analysis,
+      clientLocation: input.clientLocation,
+    });
+    const anticipatedRisks = anticipatedRisksResponse.anticipated_risks;
+
     // Step 2: Architect the chain (nodes + edges)
     const architecture = await architectChainFlow({
       businessIdea: input.businessIdea,
       analysis,
+      anticipatedRisks,
       clientLocation: input.clientLocation,
       strictLocal: input.strictLocal,
     });
