@@ -31,7 +31,7 @@ class _DocumentUploadState extends State<DocumentUpload> {
             children: [
               Icon(Icons.upload_file, color: accent, size: 20),
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(
+              Text(label, style: TextStyle(
                 color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
               )),
             ],
@@ -70,7 +70,7 @@ class _DocumentUploadState extends State<DocumentUpload> {
                   const SizedBox(height: 4),
                   Text(
                     'or click to browse • Max ${maxSize}MB',
-                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   if (accepted.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -84,7 +84,7 @@ class _DocumentUploadState extends State<DocumentUpload> {
                             color: AppTheme.bgCard,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(ext, style: const TextStyle(
+                          child: Text(ext, style: TextStyle(
                             color: AppTheme.textMuted, fontSize: 10,
                           )),
                         );

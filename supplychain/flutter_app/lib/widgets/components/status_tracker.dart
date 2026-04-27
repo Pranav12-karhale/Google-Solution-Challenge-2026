@@ -46,7 +46,7 @@ class _StatusTrackerState extends State<StatusTracker>
             children: [
               Icon(Icons.timeline, color: accent, size: 20),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Progress Tracker',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
@@ -125,7 +125,7 @@ class _StatusTrackerState extends State<StatusTracker>
                           ),
                           child: Center(
                             child: isCompleted
-                                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                ? Icon(Icons.check, size: 16, color: Colors.white)
                                 : isCurrent
                                     ? Container(
                                         width: 8,
@@ -137,7 +137,7 @@ class _StatusTrackerState extends State<StatusTracker>
                                       )
                                     : Text(
                                         '${index + 1}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: AppTheme.textMuted,
                                           fontSize: 11,
                                         ),

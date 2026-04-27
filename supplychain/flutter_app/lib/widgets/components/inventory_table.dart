@@ -59,10 +59,10 @@ class _InventoryTableState extends State<InventoryTable> {
                     height: 36,
                     child: TextField(
                       onChanged: (v) => setState(() => _filterText = v),
-                      style: const TextStyle(fontSize: 13),
+                      style: TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Filter...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
+                        prefixIcon: Icon(Icons.search, size: 18),
                         contentPadding: EdgeInsets.zero,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -90,7 +90,7 @@ class _InventoryTableState extends State<InventoryTable> {
                 return DataColumn(
                   label: Text(
                     col,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textMuted,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
@@ -116,7 +116,7 @@ class _InventoryTableState extends State<InventoryTable> {
             padding: const EdgeInsets.all(12),
             child: Text(
               '${data.length} ${data.length == 1 ? 'record' : 'records'}',
-              style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
             ),
           ),
         ],
@@ -153,7 +153,7 @@ class _InventoryTableState extends State<InventoryTable> {
       } else {
         child = Text(
           value,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
         );
       }
 

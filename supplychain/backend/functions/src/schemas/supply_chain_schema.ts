@@ -54,6 +54,12 @@ export const NodeMetadataSchema = z.object({
   certifications: z.array(z.string()).optional().describe('Compliance certifications'),
   contact_email: z.string().optional().describe('Primary contact email'),
   api_endpoint: z.string().optional().describe('External API integration endpoint'),
+  // Disruption & Risk Metadata
+  geopolitical_risk: z.number().min(0).max(10).optional().describe('Risk score 0-10 based on political stability, tariffs, sanctions'),
+  climate_risk: z.number().min(0).max(10).optional().describe('Risk score 0-10 based on weather, earthquakes, etc.'),
+  cyber_risk: z.number().min(0).max(10).optional().describe('Risk score 0-10 based on IT infrastructure and ransomware risk'),
+  supplier_tier: z.enum(['tier_1', 'tier_2', 'tier_3']).optional().describe('Supplier tier for mapping visibility'),
+  backup_supplier_id: z.string().optional().describe('ID of the pre-approved alternate supplier'),
 }).passthrough();
 
 // ============================================================
@@ -101,17 +107,7 @@ export const EdgeSchema = z.object({
   id: z.string().describe('Unique identifier for this edge'),
   source_node_id: z.string().describe('ID of the source node'),
   target_node_id: z.string().describe('ID of the target node'),
-  relationship: z.enum([
-    'supplies_to',
-    'ships_to',
-    'processes_for',
-    'stores_for',
-    'distributes_to',
-    'inspects_for',
-    'packages_for',
-    'delivers_to',
-    'returns_to',
-  ]).describe('Type of relationship between nodes'),
+  relationship: z.string().describe('Type of relationship between nodes (e.g., "supplies_to", "ships_to", "processes_for")'),
   metadata: z.object({
     transport_mode: z.string().optional().describe('Mode of transport (e.g., "air_freight", "sea", "road")'),
     estimated_days: z.number().optional().describe('Estimated transit time in days'),
@@ -134,6 +130,34 @@ export const SupplyChainSchema = z.object({
 });
 
 // ============================================================
+// Disruption and Mitigation Schemas (Agentic Management)
+// ============================================================
+
+export const DisruptionEventSchema = z.object({
+  id: z.string().describe('Unique ID for the disruption'),
+  type: z.enum([
+    'geopolitical', 'climate', 'transport', 'economic', 'cyber', 'labor', 'regulatory', 'demand', 'structural'
+  ]).describe('Category of the disruption based on the playbook'),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).describe('Impact severity'),
+  description: z.string().describe('Detailed description of what happened'),
+  affected_node_ids: z.array(z.string()).describe('IDs of nodes directly affected'),
+  affected_edge_ids: z.array(z.string()).describe('IDs of edges directly affected'),
+  timestamp: z.string().describe('When the disruption occurred'),
+});
+
+export const MitigationActionSchema = z.object({
+  id: z.string().describe('Unique ID for the mitigation action'),
+  action_type: z.enum([
+    'reroute', 'activate_backup', 'release_buffer', 'renegotiate', 'human_review', 'escalate'
+  ]).describe('Type of action to take'),
+  description: z.string().describe('Description of the mitigation'),
+  cost_impact: z.number().describe('Estimated cost impact in USD'),
+  time_impact_days: z.number().describe('Estimated time impact in days (negative if saves time)'),
+  proposed_node_changes: z.array(SupplyChainNodeSchema).optional().describe('Nodes to add or modify'),
+  proposed_edge_changes: z.array(EdgeSchema).optional().describe('Edges to add or modify'),
+});
+
+// ============================================================
 // Business Analysis Output (Agent 1)
 // ============================================================
 
@@ -149,6 +173,35 @@ export const BusinessAnalysisSchema = z.object({
 });
 
 // ============================================================
+// Risk Scanning Schemas (Auto-Detection)
+// ============================================================
+
+export const NodeRiskDetailSchema = z.object({
+  category: z.enum([
+    'geopolitical', 'climate', 'transport', 'cyber', 'economic', 'labor', 'regulatory'
+  ]).describe('Risk domain'),
+  score: z.number().min(0).max(10).describe('Risk severity 0-10'),
+  headline: z.string().describe('Short headline e.g. "Earthquake Zone"'),
+  explanation: z.string().describe('Plain-language explanation for non-experts'),
+  recommended_action: z.string().describe('What the user should do about it'),
+});
+
+export const RiskScanResultSchema = z.object({
+  node_id: z.string().describe('ID of the node being assessed'),
+  node_name: z.string().describe('Name of the node for display'),
+  location: z.string().describe('Location string of the node'),
+  overall_risk: z.number().min(0).max(10).describe('Aggregate risk score 0-10'),
+  risks: z.array(NodeRiskDetailSchema).describe('Breakdown by risk category'),
+});
+
+export const RiskReportSchema = z.object({
+  chain_id: z.string().describe('ID of the supply chain scanned'),
+  scanned_at: z.string().describe('ISO8601 timestamp of when the scan ran'),
+  overall_chain_risk: z.number().min(0).max(10).describe('Average risk across all nodes'),
+  results: z.array(RiskScanResultSchema).describe('Per-node risk assessments'),
+});
+
+// ============================================================
 // Type exports
 // ============================================================
 
@@ -157,4 +210,9 @@ export type NodeUIConfig = z.infer<typeof NodeUIConfigSchema>;
 export type SupplyChainNode = z.infer<typeof SupplyChainNodeSchema>;
 export type Edge = z.infer<typeof EdgeSchema>;
 export type SupplyChain = z.infer<typeof SupplyChainSchema>;
+export type DisruptionEvent = z.infer<typeof DisruptionEventSchema>;
+export type MitigationAction = z.infer<typeof MitigationActionSchema>;
 export type BusinessAnalysis = z.infer<typeof BusinessAnalysisSchema>;
+export type NodeRiskDetail = z.infer<typeof NodeRiskDetailSchema>;
+export type RiskScanResult = z.infer<typeof RiskScanResultSchema>;
+export type RiskReport = z.infer<typeof RiskReportSchema>;

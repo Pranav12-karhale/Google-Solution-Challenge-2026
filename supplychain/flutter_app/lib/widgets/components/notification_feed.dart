@@ -22,7 +22,7 @@ class NotificationFeed extends StatelessWidget {
             children: [
               Icon(Icons.notifications_outlined, color: accent, size: 20),
               const SizedBox(width: 8),
-              const Text('Alerts', style: TextStyle(
+              Text('Alerts', style: TextStyle(
                 color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
               )),
               const Spacer(),
@@ -87,7 +87,7 @@ class NotificationFeed extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             item['message'] ?? '',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                             ),
@@ -96,7 +96,7 @@ class NotificationFeed extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               item['time'].toString(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textMuted,
                                 fontSize: 11,
                               ),

@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import { generateMockSupplyChain } from './utils/mock_data.js';
-import type { SupplyChain } from './schemas/supply_chain_schema.js';
+import type { SupplyChain, DisruptionEvent, MitigationAction, RiskReport } from './schemas/supply_chain_schema.js';
 
 dotenv.config();
 
@@ -73,6 +73,7 @@ app.use(authMiddleware);
 
 // In-memory store (simulates Firestore)
 const supplyChains: Map<string, SupplyChain> = new Map();
+const riskReports: Map<string, RiskReport> = new Map();
 
 const USE_AI = !!process.env.GOOGLE_GENAI_API_KEY;
 
@@ -81,31 +82,88 @@ const USE_AI = !!process.env.GOOGLE_GENAI_API_KEY;
 // ============================================================
 app.post('/api/generate', async (req, res) => {
   try {
-    const { businessIdea } = req.body;
+    const { businessIdea, clientLocation, strictLocal, chainScope, destination, displayStrategy } = req.body;
     if (!businessIdea || typeof businessIdea !== 'string') {
       res.status(400).json({ error: 'businessIdea is required' });
       return;
     }
 
-    console.log(`\n🧠 Generating supply chain for: "${businessIdea}"`);
+    // ============================================================
+    // FLOWCHART DECISION TREE
+    // ============================================================
+    // 1. Classify scope: inter-country vs intra-country (auto-detect or explicit)
+    // 2. If location + destination → generate best route FROM origin TO destination
+    // 3. If location, no destination → generate locally-based chain
+    // 4. If no location at all → generate general supply chain
+    // ============================================================
+
+    let enrichedIdea = businessIdea;
+    const scope = chainScope || 'auto';
+
+    // Scope prefix
+    const scopeInstruction = scope === 'inter'
+      ? 'This is an INTERNATIONAL supply chain. Include cross-border logistics, customs, and global shipping nodes.'
+      : scope === 'intra'
+        ? 'This is a DOMESTIC/LOCAL supply chain. Keep ALL nodes within the same country. Do NOT include international shipping or customs.'
+        : ''; // auto = let AI decide
+
+    // Strategy prefix
+    const strategyInstruction = displayStrategy === 'all_options'
+      ? 'DISPLAY STRATEGY: ALL OPTIONS. Instead of a single linear path, you MUST generate MULTIPLE alternative nodes (e.g., 2-3 different warehouse options, 2-3 different supplier options) for each stage of the supply chain. Assign alternative nodes at the same stage the SAME "order" number. This will allow the UI to display them as parallel alternatives.'
+      : 'DISPLAY STRATEGY: BEST ROUTE. Generate a single, highly optimized, linear route. Each stage should have exactly one node.';
+
+    if (clientLocation && destination) {
+      // CASE: Location + Destination → Best route
+      enrichedIdea = `${businessIdea}. ${scopeInstruction} ${strategyInstruction} The business ORIGIN is in ${clientLocation.address} (Lat: ${clientLocation.lat}, Lng: ${clientLocation.lng}). The DESTINATION/market is: ${destination}. Design the BEST POSSIBLE ROUTE from origin to destination, using real factories, warehouses, ports, and logistics providers that exist along this corridor. Every node must be a real, factual business.`;
+      console.log(`\n🧠 Generating ROUTED chain: "${businessIdea}"`);
+      console.log(`   📍 Origin: ${clientLocation.address}`);
+      console.log(`   🎯 Destination: ${destination}`);
+      console.log(`   🌐 Scope: ${scope}`);
+    } else if (clientLocation && !destination) {
+      // CASE: Location only, no destination → Local chain
+      enrichedIdea = `${businessIdea}. ${scopeInstruction} ${strategyInstruction} IMPORTANT: This is a LOCAL business based in ${clientLocation.address} (Lat: ${clientLocation.lat}, Lng: ${clientLocation.lng}). ALL suppliers, warehouses, manufacturers, and operations MUST be located within 100 miles of this location. Use ONLY factual, actually existing local businesses. Do NOT use international suppliers.`;
+      console.log(`\n🧠 Generating LOCAL chain: "${businessIdea}"`);
+      console.log(`   📍 Location: ${clientLocation.address}`);
+      console.log(`   🌐 Scope: ${scope}`);
+    } else if (destination) {
+      // CASE: No location but destination given → general chain ending at destination
+      enrichedIdea = `${businessIdea}. ${scopeInstruction} ${strategyInstruction} The product must reach: ${destination}. Design a supply chain that delivers to this destination using real, factual businesses.`;
+      console.log(`\n🧠 Generating chain TO DESTINATION: "${businessIdea}"`);
+      console.log(`   🎯 Destination: ${destination}`);
+      console.log(`   🌐 Scope: ${scope}`);
+    } else {
+      // CASE: No location, no destination → general chain
+      enrichedIdea = `${businessIdea}. ${scopeInstruction} ${strategyInstruction} Design a general supply chain using real-world industry hubs and factual businesses.`;
+      console.log(`\n🧠 Generating GENERAL chain: "${businessIdea}"`);
+      console.log(`   🌐 Scope: ${scope}`);
+    }
+
     console.log(`   Mode: ${USE_AI ? '🤖 AI (Gemini)' : '📋 Mock Data'}\n`);
 
     let chain: SupplyChain;
 
     if (USE_AI) {
       try {
-        // Dynamic import to avoid loading Genkit when not needed
         const { generateSupplyChainFlow } = await import('./flows/generate_chain.js');
-        chain = await generateSupplyChainFlow({ businessIdea });
+        chain = await generateSupplyChainFlow({ 
+          businessIdea: enrichedIdea,
+          clientLocation,
+          strictLocal: strictLocal || (!destination && !!clientLocation),
+          destination,
+          chainScope: scope,
+          displayStrategy,
+        });
       } catch (err: any) {
         console.warn(`\n⚠️ AI Generation completely failed (${err.message}).`);
         console.warn(`   Falling back to Mock Data to prevent frontend block...\n`);
         chain = generateMockSupplyChain(businessIdea);
+        patchMockDataLocation(chain, clientLocation, destination, strictLocal);
       }
     } else {
       // Simulate AI processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       chain = generateMockSupplyChain(businessIdea);
+      patchMockDataLocation(chain, clientLocation, destination, strictLocal);
     }
 
     // Store in memory
@@ -120,6 +178,48 @@ app.post('/api/generate', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper to patch mock data locations so fallback doesn't show confusing international nodes
+function patchMockDataLocation(chain: SupplyChain, clientLocation: any, destination: string, strictLocal: boolean) {
+  if (!chain.nodes || chain.nodes.length === 0) return;
+
+  if (clientLocation && destination) {
+    console.log(`   📍 Patching mock data for ROUTE: ${clientLocation.address} → ${destination}`);
+    // Patch first node to origin
+    chain.nodes[0] = {
+      ...chain.nodes[0],
+      name: chain.nodes[0].name.replace(/\([^)]*\)/g, '').trim() + ` (${clientLocation.address})`,
+      metadata: { ...chain.nodes[0].metadata, location: clientLocation.address, coordinates: { lat: clientLocation.lat, lng: clientLocation.lng } },
+    };
+    // Patch last node to destination
+    const lastIdx = chain.nodes.length - 1;
+    chain.nodes[lastIdx] = {
+      ...chain.nodes[lastIdx],
+      name: chain.nodes[lastIdx].name.replace(/\([^)]*\)/g, '').trim() + ` (${destination})`,
+      metadata: { ...chain.nodes[lastIdx].metadata, location: destination, coordinates: { lat: 0, lng: 0 } },
+    };
+    // Clear out intermediate international names and metadata locations
+    for (let i = 1; i < lastIdx; i++) {
+      chain.nodes[i].name = chain.nodes[i].name.replace(/\([^)]*\)/g, '').trim() + ` (In Transit)`;
+      chain.nodes[i].metadata = {
+        ...chain.nodes[i].metadata,
+        location: 'In Transit',
+        coordinates: { lat: 0, lng: 0 },
+      };
+    }
+  } else if (clientLocation) {
+    console.log(`   📍 Patching mock data with client location: ${clientLocation.address}`);
+    chain.nodes = chain.nodes.map(node => ({
+      ...node,
+      name: node.name.replace(/\([^)]*\)/g, '').trim() + ` (${clientLocation.address})`,
+      metadata: {
+        ...node.metadata,
+        location: clientLocation.address,
+        coordinates: { lat: clientLocation.lat, lng: clientLocation.lng },
+      },
+    }));
+  }
+}
 
 // ============================================================
 // GET /api/chains - List all supply chains
@@ -263,6 +363,208 @@ app.delete('/api/chains/:id', (req: express.Request, res: express.Response) => {
   } else {
     res.status(404).json({ error: 'Supply chain not found' });
   }
+});
+
+// ============================================================
+// POST /api/chains/:id/disruptions/trigger - Trigger a disruption
+// ============================================================
+app.post('/api/chains/:id/disruptions/trigger', (req: express.Request, res: express.Response) => {
+  const chain = supplyChains.get(req.params.id as string);
+  if (!chain) {
+    res.status(404).json({ error: 'Supply chain not found' });
+    return;
+  }
+  
+  const disruption: DisruptionEvent = req.body;
+  
+  // Set affected nodes to critical state
+  disruption.affected_node_ids.forEach(nodeId => {
+    const node = chain.nodes.find(n => n.id === nodeId);
+    if (node) {
+      node.status = 'critical';
+    }
+  });
+  
+  chain.status = 'disrupted';
+  
+  res.json({ success: true, supply_chain: chain });
+});
+
+// ============================================================
+// POST /api/chains/:id/disruptions/resolve - Get AI mitigation plan
+// ============================================================
+app.post('/api/chains/:id/disruptions/resolve', async (req: express.Request, res: express.Response) => {
+  try {
+    const chain = supplyChains.get(req.params.id as string);
+    if (!chain) {
+      res.status(404).json({ error: 'Supply chain not found' });
+      return;
+    }
+
+    const disruption: DisruptionEvent = req.body;
+    
+    let mitigation: MitigationAction;
+    if (USE_AI) {
+      const { resolveDisruptionFlow } = await import('./flows/resolve_disruption.js');
+      mitigation = await resolveDisruptionFlow({ supplyChain: chain, disruption });
+    } else {
+      // Mock mitigation
+      mitigation = {
+        id: `mitigation_${Date.now()}`,
+        action_type: 'activate_backup',
+        description: 'Mock mitigation action generated.',
+        cost_impact: 5000,
+        time_impact_days: -2,
+      };
+    }
+    
+    res.json({ success: true, mitigation });
+  } catch (error: any) {
+    console.error('❌ Resolve disruption failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// POST /api/chains/:id/disruptions/execute - Execute Mitigation
+// ============================================================
+app.post('/api/chains/:id/disruptions/execute', (req: express.Request, res: express.Response) => {
+  const chain = supplyChains.get(req.params.id as string);
+  if (!chain) {
+    res.status(404).json({ error: 'Supply chain not found' });
+    return;
+  }
+
+  const mitigation: MitigationAction = req.body;
+
+  // Apply proposed node changes
+  if (mitigation.proposed_node_changes) {
+    mitigation.proposed_node_changes.forEach(newNode => {
+      // If node exists, update it, else push
+      const idx = chain.nodes.findIndex(n => n.id === newNode.id);
+      if (idx >= 0) {
+        chain.nodes[idx] = newNode;
+      } else {
+        chain.nodes.push(newNode);
+      }
+    });
+  }
+
+  // Apply proposed edge changes
+  if (mitigation.proposed_edge_changes) {
+    mitigation.proposed_edge_changes.forEach(newEdge => {
+      const idx = chain.edges.findIndex(e => e.id === newEdge.id);
+      if (idx >= 0) {
+        chain.edges[idx] = newEdge;
+      } else {
+        chain.edges.push(newEdge);
+      }
+    });
+  }
+
+  // Restore chain to active state
+  chain.status = 'active';
+  chain.nodes.forEach(n => {
+    if (n.status === 'critical') n.status = 'active'; // Reset critical nodes for simplicity
+  });
+
+  res.json({ success: true, supply_chain: chain });
+});
+
+// ============================================================
+// POST /api/chains/:id/risk-scan - Run AI risk scan on all nodes
+// ============================================================
+app.post('/api/chains/:id/risk-scan', async (req: express.Request, res: express.Response) => {
+  try {
+    const chain = supplyChains.get(req.params.id as string);
+    if (!chain) {
+      res.status(404).json({ error: 'Supply chain not found' });
+      return;
+    }
+
+    console.log(`\n🔍 Running risk scan for chain: ${chain.name}`);
+
+    let report: RiskReport;
+
+    if (USE_AI) {
+      const { scanSupplyChainRisksFlow } = await import('./flows/scan_risks.js');
+      const scanResult = await scanSupplyChainRisksFlow({ supplyChain: chain });
+
+      // Update node metadata with fresh risk scores
+      for (const result of scanResult.results) {
+        const node = chain.nodes.find(n => n.id === result.node_id);
+        if (node) {
+          const geoRisk = result.risks.find(r => r.category === 'geopolitical');
+          const climateRisk = result.risks.find(r => r.category === 'climate');
+          const cyberRisk = result.risks.find(r => r.category === 'cyber');
+          if (geoRisk) node.metadata.geopolitical_risk = geoRisk.score;
+          if (climateRisk) node.metadata.climate_risk = climateRisk.score;
+          if (cyberRisk) node.metadata.cyber_risk = cyberRisk.score;
+        }
+      }
+
+      const avgRisk = scanResult.results.length > 0
+        ? Math.round((scanResult.results.reduce((sum, r) => sum + r.overall_risk, 0) / scanResult.results.length) * 10) / 10
+        : 0;
+
+      report = {
+        chain_id: chain.id,
+        scanned_at: new Date().toISOString(),
+        overall_chain_risk: avgRisk,
+        results: scanResult.results,
+      };
+    } else {
+      // Mock risk scan
+      report = {
+        chain_id: chain.id,
+        scanned_at: new Date().toISOString(),
+        overall_chain_risk: 4.2,
+        results: chain.nodes.map(n => ({
+          node_id: n.id,
+          node_name: n.name,
+          location: n.metadata?.location || 'Unknown',
+          overall_risk: Math.round(Math.random() * 7 * 10) / 10,
+          risks: [
+            {
+              category: 'climate' as const,
+              score: Math.round(Math.random() * 8 * 10) / 10,
+              headline: 'Weather Exposure',
+              explanation: 'This location experiences seasonal weather disruptions that could slow down operations.',
+              recommended_action: 'Build a 30-day safety stock buffer for this node.',
+            },
+            {
+              category: 'geopolitical' as const,
+              score: Math.round(Math.random() * 6 * 10) / 10,
+              headline: 'Trade Stability',
+              explanation: 'The region has moderate trade policy changes that could affect import/export timelines.',
+              recommended_action: 'Monitor trade policy updates and identify an alternative supplier.',
+            },
+          ],
+        })),
+      };
+    }
+
+    // Cache the report
+    riskReports.set(chain.id, report);
+
+    console.log(`✅ Risk scan complete. Overall chain risk: ${report.overall_chain_risk}/10`);
+    res.json({ success: true, report });
+  } catch (error: any) {
+    console.error('❌ Risk scan failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// GET /api/chains/:id/risk-report - Get cached risk report
+// ============================================================
+app.get('/api/chains/:id/risk-report', (req: express.Request, res: express.Response) => {
+  const report = riskReports.get(req.params.id as string);
+  if (!report) {
+    res.status(404).json({ error: 'No risk report found. Run a risk scan first.' });
+    return;
+  }
+  res.json({ success: true, report });
 });
 
 // ============================================================

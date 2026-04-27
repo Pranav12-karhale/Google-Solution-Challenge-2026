@@ -43,12 +43,12 @@ class _OrderListState extends State<OrderList> {
                   children: [
                     Icon(Icons.receipt_long, color: accent, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Orders', style: TextStyle(
+                    Text('Orders', style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
                     )),
                     const Spacer(),
                     Text('${filteredData.length} items',
-                        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                   ],
                 ),
                 if (statusFilters.isNotEmpty) ...[
@@ -84,7 +84,7 @@ class _OrderListState extends State<OrderList> {
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(AppTheme.bgSurface),
               columns: columns.map((col) => DataColumn(
-                label: Text(col, style: const TextStyle(
+                label: Text(col, style: TextStyle(
                   color: AppTheme.textMuted, fontWeight: FontWeight.w600, fontSize: 12,
                 )),
               )).toList(),
@@ -128,7 +128,7 @@ class _OrderListState extends State<OrderList> {
         )),
       );
     }
-    return Text(value, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13));
+    return Text(value, style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
   }
 }
 

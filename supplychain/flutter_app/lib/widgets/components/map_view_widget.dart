@@ -111,13 +111,13 @@ class _MapViewWidgetState extends State<MapViewWidget> with SingleTickerProvider
                     point: _origin,
                     width: 30,
                     height: 30,
-                    child: const Icon(Icons.location_on, color: AppTheme.success, size: 24),
+                    child: Icon(Icons.location_on, color: AppTheme.success, size: 24),
                   ),
                   Marker(
                     point: _destination,
                     width: 30,
                     height: 30,
-                    child: const Icon(Icons.location_on, color: AppTheme.accentPurple, size: 24),
+                    child: Icon(Icons.location_on, color: AppTheme.accentPurple, size: 24),
                   ),
                   Marker(
                     point: _currentPos,
@@ -139,7 +139,7 @@ class _MapViewWidgetState extends State<MapViewWidget> with SingleTickerProvider
                             ],
                             border: Border.all(color: Colors.white, width: 2),
                           ),
-                          child: const Icon(Icons.directions_boat, color: Colors.white, size: 16),
+                          child: Icon(Icons.directions_boat, color: Colors.white, size: 16),
                         );
                       },
                     ),
@@ -164,7 +164,7 @@ class _MapViewWidgetState extends State<MapViewWidget> with SingleTickerProvider
                 children: [
                   Icon(Icons.map_outlined, color: accent, size: 16),
                   const SizedBox(width: 8),
-                  const Text('Live GIS Tracking', style: TextStyle(
+                  Text('Live GIS Tracking', style: TextStyle(
                     color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600,
                   )),
                 ],

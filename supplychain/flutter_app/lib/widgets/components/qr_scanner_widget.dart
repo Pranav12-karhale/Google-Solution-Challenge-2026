@@ -21,7 +21,7 @@ class QrScannerWidget extends StatelessWidget {
             children: [
               Icon(Icons.qr_code_scanner, color: accent, size: 20),
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(
+              Text(label, style: TextStyle(
                 color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
               )),
             ],
@@ -50,13 +50,13 @@ class QrScannerWidget extends StatelessWidget {
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('QR Scanner would open on mobile devices'),
+                  content: Text('QR Scanner would open on mobile devices'),
                   backgroundColor: AppTheme.bgCard,
                 ),
               );
             },
-            icon: const Icon(Icons.camera_alt, size: 18),
-            label: const Text('Open Scanner'),
+            icon: Icon(Icons.camera_alt, size: 18),
+            label: Text('Open Scanner'),
             style: ElevatedButton.styleFrom(backgroundColor: accent),
           ),
         ],

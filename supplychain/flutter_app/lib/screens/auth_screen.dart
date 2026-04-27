@@ -116,7 +116,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.hub, color: Colors.white, size: 38),
+                        child: Icon(Icons.hub, color: Colors.white, size: 38),
                       ),
                       const SizedBox(height: 24),
 
@@ -158,7 +158,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                       const SizedBox(height: 12),
                       _OAuthButton(
                         onTap: auth.isLoading ? null : () => auth.signInWithGitHub(),
-                        icon: const Icon(Icons.code, color: Colors.white, size: 20),
+                        icon: Icon(Icons.code, color: Colors.white, size: 20),
                         label: 'Continue with GitHub',
                         bgColor: const Color(0xFF24292F),
                         textColor: Colors.white,
@@ -226,7 +226,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                                     color: AppTheme.textPrimary,
                                     fontSize: 14,
                                   ),
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     hintText: 'John Doe',
                                     prefixIcon: Icon(Icons.person_outline,
                                         size: 20, color: AppTheme.textMuted),
@@ -258,7 +258,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                                   color: AppTheme.textPrimary,
                                   fontSize: 14,
                                 ),
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   hintText: 'you@example.com',
                                   prefixIcon: Icon(Icons.email_outlined,
                                       size: 20, color: AppTheme.textMuted),
@@ -294,7 +294,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                                 ),
                                 decoration: InputDecoration(
                                   hintText: '••••••••',
-                                  prefixIcon: const Icon(Icons.lock_outline,
+                                  prefixIcon: Icon(Icons.lock_outline,
                                       size: 20, color: AppTheme.textMuted),
                                   suffixIcon: IconButton(
                                     icon: Icon(
@@ -395,7 +395,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.check_circle,
+                                      Icon(Icons.check_circle,
                                           color: AppTheme.success, size: 16),
                                       const SizedBox(width: 8),
                                       Expanded(
@@ -429,20 +429,20 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline,
+                              Icon(Icons.error_outline,
                                   color: AppTheme.error, size: 18),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   auth.error!,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.error,
                                     fontSize: 13,
                                   ),
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.close,
+                                icon: Icon(Icons.close,
                                     color: AppTheme.error, size: 16),
                                 onPressed: auth.clearError,
                                 padding: EdgeInsets.zero,

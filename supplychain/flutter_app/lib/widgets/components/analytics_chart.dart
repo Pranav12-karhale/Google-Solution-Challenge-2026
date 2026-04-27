@@ -55,7 +55,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -118,7 +118,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
               reservedSize: 42,
               getTitlesWidget: (value, meta) => Text(
                 value.toInt().toString(),
-                style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
               ),
             ),
           ),
@@ -132,7 +132,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       data[idx][xKey].toString(),
-                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                     ),
                   );
                 }
@@ -211,7 +211,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
               reservedSize: 42,
               getTitlesWidget: (value, meta) => Text(
                 value.toInt().toString(),
-                style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
               ),
             ),
           ),
@@ -225,7 +225,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       data[idx][xKey].toString(),
-                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                     ),
                   );
                 }
@@ -316,7 +316,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
                   color: colors[e.key % colors.length],
                   radius: isTouched ? 85 : 75,
                   title: isTouched ? '${val.toInt()}' : '',
-                  titleStyle: const TextStyle(
+                  titleStyle: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -351,7 +351,7 @@ class _AnalyticsChartState extends State<AnalyticsChart>
                     Expanded(
                       child: Text(
                         e.value[labelKey].toString(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
                         ),

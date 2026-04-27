@@ -22,15 +22,33 @@ const ai = genkit({
 });
 
 const PRIORITIZED_MODELS = [
+  'googleai/gemini-3.1-pro',
   'googleai/gemini-2.5-flash',
   'googleai/gemini-2.5-flash-lite',
+  'googleai/gemini-2.0-flash-lite',
   'googleai/gemini-1.5-flash',
 ];
 
 // Hard timeout (seconds) for the entire fallback loop
-const OVERALL_TIMEOUT_MS = 30_000;
+const OVERALL_TIMEOUT_MS = 60_000;
 // Max delay we'll ever wait for a single retry
 const MAX_RETRY_DELAY_MS = 5_000;
+
+let _aiInstances: any[] | null = null;
+function getAiInstances() {
+  if (_aiInstances) return _aiInstances;
+  
+  _aiInstances = [
+    process.env.GOOGLE_GENAI_API_KEY ? genkit({ plugins: [googleAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY })] }) : null,
+    process.env.GOOGLE_GENAI_API_KEY_BACKUP ? genkit({ plugins: [googleAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY_BACKUP })] }) : null,
+  ].filter(Boolean);
+  
+  if (_aiInstances.length === 0) {
+    console.warn("⚠️ WARNING: getAiInstances found 0 valid API keys in environment variables!");
+  }
+  
+  return _aiInstances;
+}
 
 /**
  * Helper to attempt generation with multiple models in order of priority.
@@ -45,46 +63,60 @@ async function generateWithFallback<T extends z.ZodTypeAny>(options: {
   const deadline = Date.now() + OVERALL_TIMEOUT_MS;
 
   for (const model of PRIORITIZED_MODELS) {
-    // Check hard timeout
     if (Date.now() >= deadline) {
       console.warn(`   ⏰ Overall timeout reached (${OVERALL_TIMEOUT_MS / 1000}s). Giving up on AI.`);
       break;
     }
 
-    try {
-      console.log(`   📡 Trying model: ${model}...`);
-      const { output } = await ai.generate({
-        model,
-        prompt: options.prompt,
-        output: { schema: options.outputSchema },
-        config: model.includes('3.1-pro') ? { thinkingLevel: 'high' } : {},
-      });
+    const aiInstances = getAiInstances();
+    for (let keyIdx = 0; keyIdx < aiInstances.length; keyIdx++) {
+      const currentAi = aiInstances[keyIdx];
 
-      if (output) {
-        console.log(`   ✅ Success with: ${model}`);
-        return output;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (Date.now() >= deadline) break;
+
+        try {
+          console.log(`   📡 Trying model: ${model} with key ${keyIdx + 1}${attempt > 0 ? ` (retry ${attempt})` : ''}...`);
+          const { output } = await currentAi.generate({
+            model,
+            prompt: options.prompt,
+            output: { schema: options.outputSchema },
+            config: {},
+          });
+
+          if (output) {
+            console.log(`   ✅ Success with: ${model} (key ${keyIdx + 1})`);
+            return output;
+          }
+        } catch (error: any) {
+          lastError = error;
+          const msg = error.message || String(error);
+          console.warn(`   ⚠️ ${model} (key ${keyIdx + 1}) failed: ${msg.substring(0, 120)}...`);
+
+          if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) {
+            if (keyIdx < aiInstances.length - 1) {
+              console.log(`   🔄 Rate limited. Switching to next API key immediately...`);
+              break; // Move to next key
+            } else {
+              console.log(`   ⏭️ All keys exhausted for ${model}. Falling back to next model...`);
+              keyIdx = aiInstances.length; // break key loop
+              break; // Try next model
+            }
+          }
+
+          if (msg.includes('503')) {
+            const delayMs = Math.min(MAX_RETRY_DELAY_MS, 3000);
+            console.log(`   ⏳ Server overloaded, waiting ${delayMs}ms then trying next...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            break; // Try next key
+          }
+
+          // Any other error (404 model not found, etc.) — skip immediately
+          console.log(`   ⏭️ Non-retryable error, trying next model...`);
+          keyIdx = aiInstances.length; // force key loop to end
+          break; // break attempt loop
+        }
       }
-    } catch (error: any) {
-      lastError = error;
-      const msg = error.message || String(error);
-      console.warn(`   ⚠️ ${model} failed: ${msg.substring(0, 80)}...`);
-
-      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-        // Quota is project-wide on free tier — waiting won't help, skip to next model
-        console.log(`   ⏭️ Rate limited (project-wide quota). Skipping to next model...`);
-        continue;
-      }
-
-      if (msg.includes('503')) {
-        // Server overloaded — wait briefly then try next model
-        const delayMs = Math.min(MAX_RETRY_DELAY_MS, 3000);
-        console.log(`   ⏳ Server overloaded, waiting ${delayMs}ms then trying next...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        continue;
-      }
-
-      // Any other error (404 model not found, etc.) — skip immediately
-      console.log(`   ⏭️ Non-retryable error, trying next model...`);
     }
   }
 
@@ -99,14 +131,26 @@ async function generateWithFallback<T extends z.ZodTypeAny>(options: {
 const analyzeBusinessFlow = ai.defineFlow(
   {
     name: 'analyzeBusiness',
-    inputSchema: z.object({ businessIdea: z.string() }),
+    inputSchema: z.object({ 
+      businessIdea: z.string(),
+      clientLocation: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        address: z.string(),
+      }).optional(),
+      strictLocal: z.boolean().optional(),
+    }),
     outputSchema: BusinessAnalysisSchema,
   },
   async (input) => {
+    const locationContext = input.clientLocation
+      ? `\nClient Location: ${input.clientLocation.address} (Lat: ${input.clientLocation.lat}, Lng: ${input.clientLocation.lng})\nStrict Local Sourcing: ${input.strictLocal ? 'YES - This must be a hyper-local business.' : 'No'}`
+      : '';
+
     return await generateWithFallback({
       prompt: `You are a supply chain expert and business analyst. Analyze the following business idea and break it down into its logistical components.
 
-Business Idea: "${input.businessIdea}"
+Business Idea: "${input.businessIdea}"${locationContext}
 
 Identify:
 1. The primary industry this business operates in
@@ -135,6 +179,12 @@ const architectChainFlow = ai.defineFlow(
     inputSchema: z.object({
       businessIdea: z.string(),
       analysis: BusinessAnalysisSchema,
+      clientLocation: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        address: z.string(),
+      }).optional(),
+      strictLocal: z.boolean().optional(),
     }),
     outputSchema: z.object({
       nodes: z.array(z.object({
@@ -173,10 +223,14 @@ const architectChainFlow = ai.defineFlow(
       })),
     });
 
+    const locationContext = input.clientLocation
+      ? `\nClient Location: ${input.clientLocation.address} (Lat: ${input.clientLocation.lat}, Lng: ${input.clientLocation.lng})\nStrict Local Sourcing: ${input.strictLocal ? 'YES - MUST use businesses very close to these coordinates' : 'Preferred'}`
+      : '';
+
     return await generateWithFallback({
       prompt: `You are a supply chain architect. Based on the following business analysis, design a complete supply chain node graph.
 
-Business Idea: "${input.businessIdea}"
+Business Idea: "${input.businessIdea}"${locationContext}
 
 Analysis:
 - Industry: ${input.analysis.industry}
@@ -189,48 +243,62 @@ Analysis:
 - Special Considerations: ${input.analysis.special_considerations.join(', ')}
 
 Design the supply chain with:
-1. Specific, named nodes with realistic geographic locations (e.g., "Coffee Roasting Facility (Portland, OR)", "Semiconductor Fab (Hsinchu, Taiwan)", "Distribution Center (Memphis, TN)", not just "Manufacturer" or "Warehouse")
-2. Proper ordering from raw materials to end consumer
-3. Logical edges connecting nodes with appropriate relationships
-4. Realistic metadata for each node, INCLUDING precise real-world geographic coordinates (latitude/longitude) for each node based on its realistic location.
-5. Include quality control, customs, or compliance nodes where the analysis requires them
+1. Specific, named nodes with realistic geographic locations. 
+   - CRITICAL REQUIREMENT: You MUST use FACTUAL, ACTUALLY EXISTING businesses (real factories, real warehouses, real shops, real distributors) whenever possible. Do NOT invent names like "Acme Warehouse". 
+   - If the business idea mentions a specific city or region, OR if a Client Location is provided above, you MUST find real businesses operating near that specific location.
+   - If Strict Local Sourcing is YES, you MUST anchor the primary operations (manufacturing, warehousing, fulfillment) as close to the Client Location's latitude/longitude as possible.
+   - If no location context is provided at all, use real-world industry hubs (e.g., TSMC in Taiwan for chips, Port of Long Beach, etc.).
+2. Proper ordering from raw materials to end consumer.
+3. Logical edges connecting nodes with appropriate relationships.
+4. Realistic metadata for each node, INCLUDING precise real-world geographic coordinates (latitude/longitude) for these actual businesses.
+5. Include quality control, customs, or compliance nodes where the analysis requires them.
 6. Use sequential node IDs like "node_1", "node_2", etc.
 7. Use sequential edge IDs like "edge_1", "edge_2", etc.
 
-Create an appropriate number of nodes depending on complexity (can be short for local or extensive for inter-country supply). Design a modern hybrid chain (e.g., 'Core + Plus')—long enough to remain economically competitive (global hubs for cost/scale), but short enough to survive a crisis (parallel localized nodes for agility). Be realistic and practical.`,
+Create an appropriate number of nodes depending on complexity. 
+CRITICAL RULES FOR LOCALIZATION:
+- If Strict Local Sourcing is YES, you MUST build a HYPER-LOCAL supply chain. EVERY single node (raw materials, manufacturing, warehousing, distribution) MUST be located within a 100-mile radius of the Client Location. DO NOT include international or cross-border nodes under any circumstances.
+- If Strict Local is NO but a local business is specified, keep the supply chain localized where possible but use global hubs if necessary.
+- Be strictly factual and practical.`,
       outputSchema,
     });
   }
 );
 
 // ============================================================
-// Agent 3: UI Config Generator
-// Assigns page_components to each node based on its type
+// Agent 3: UI Config Generator (BATCHED)
+// Assigns page_components to each node based on its type in a single request
 // ============================================================
 
-const generateUIConfigFlow = ai.defineFlow(
+const batchGenerateUIConfigFlow = ai.defineFlow(
   {
-    name: 'generateUIConfig',
+    name: 'batchGenerateUIConfig',
     inputSchema: z.object({
-      node: z.object({
+      nodes: z.array(z.object({
         id: z.string(),
         name: z.string(),
         type: NodeType,
         description: z.string(),
         metadata: z.record(z.any()),
-      }),
+      })),
       analysis: BusinessAnalysisSchema,
     }),
-    outputSchema: NodeUIConfigSchema,
+    outputSchema: z.object({
+      configs: z.record(z.string(), NodeUIConfigSchema),
+    }),
   },
   async (input) => {
+    const nodesContext = input.nodes.map(n => `- Node ID: [${n.id}]\n  Name: "${n.name}" (Type: ${n.type})\n  Description: ${n.description}`).join('\n\n');
+
     return await generateWithFallback({
       prompt: `You are a UI/UX expert for supply chain management. Generate the UI configuration for a supply chain node page.
+You are receiving a list of ${input.nodes.length} nodes. You MUST generate a completely unique, highly specific UI configuration for EVERY SINGLE node in this list. Do not skip any node.
 
-Node: "${input.node.name}" (Type: ${input.node.type})
-Description: ${input.node.description}
 Industry: ${input.analysis.industry}
 Compliance Needs: ${input.analysis.compliance_needs.join(', ')}
+
+Here are the ${input.nodes.length} nodes you need to configure:
+${nodesContext}
 
 Available component types:
 - "kpi_card_row": Row of metric cards. Args: { cards: [{ label, unit, dataKey }] }
@@ -246,12 +314,16 @@ Available component types:
 - "document_upload": File upload. Args: { acceptedTypes: string[], maxSizeMB: number, label: string }
 - "qr_scanner": QR scanner. Args: { outputField: string, label: string }
 
-Choose an appropriate Material icon name for this node type.
-Choose an appropriate hex color.
-Select 3-6 components that are most relevant for managing this specific node type in this industry.
-Configure each component's args with realistic, specific values for this node.
+For EVERY node ID, provide its configuration in the output dictionary.
+For each configuration:
+1. Choose an appropriate Material icon name for this node type.
+2. Choose an appropriate hex color.
+3. Select 3-6 components that are most relevant for managing this specific node type in this industry.
+4. Configure each component's args with realistic, specific values for this node.
 CRITICAL: If you select "map_view", you must populate the "origin" coordinates using this node's geographic coordinates from the metadata, and "destination" connecting to the next logical location. If you drop the args it will crash.`,
-      outputSchema: NodeUIConfigSchema,
+      outputSchema: z.object({
+        configs: z.record(z.string(), NodeUIConfigSchema),
+      }),
     });
   }
 );
@@ -264,36 +336,69 @@ CRITICAL: If you select "map_view", you must populate the "origin" coordinates u
 export const generateSupplyChainFlow = ai.defineFlow(
   {
     name: 'generateSupplyChain',
-    inputSchema: z.object({ businessIdea: z.string() }),
+    inputSchema: z.object({ 
+      businessIdea: z.string(),
+      clientLocation: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        address: z.string(),
+      }).optional(),
+      strictLocal: z.boolean().optional(),
+      destination: z.string().optional(),
+      chainScope: z.string().optional(),
+      displayStrategy: z.string().optional(),
+    }),
     outputSchema: SupplyChainSchema,
   },
   async (input) => {
     // Step 1: Analyze the business idea
-    const analysis = await analyzeBusinessFlow(input);
+    const analysis = await analyzeBusinessFlow({
+      businessIdea: input.businessIdea,
+      clientLocation: input.clientLocation,
+      strictLocal: input.strictLocal,
+    });
 
     // Step 2: Architect the chain (nodes + edges)
     const architecture = await architectChainFlow({
       businessIdea: input.businessIdea,
       analysis,
+      clientLocation: input.clientLocation,
+      strictLocal: input.strictLocal,
     });
 
-    // Step 3: Generate UI configs for each node SEQUENTIALLY to avoid rate limits
-    const nodesWithUI = [];
-    for (const node of architecture.nodes) {
-      // Add slight delay between requests just to be safe
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const uiConfig = await generateUIConfigFlow({
-        node,
-        analysis,
-      });
+    // Step 3: Generate UI configs for ALL nodes in a single batched request to avoid rate limits
+    console.log(`   🎨 Batching UI configurations for ${architecture.nodes.length} nodes...`);
+    const uiConfigsResponse = await batchGenerateUIConfigFlow({
+      nodes: architecture.nodes,
+      analysis,
+    });
+    
+    console.log(`   🐛 DEBUG uiConfigsResponse:`, JSON.stringify(uiConfigsResponse).substring(0, 500));
+    
+    const uiConfigs = uiConfigsResponse.configs || {};
 
-      nodesWithUI.push({
+    const nodesWithUI = architecture.nodes.map(node => {
+      // Fallback config if AI accidentally missed one (extremely rare)
+      let config: any = uiConfigs[node.id] || uiConfigs[`[${node.id}]`];
+      if (typeof config === 'string') {
+        try { config = JSON.parse(config); } catch (e) { config = null; }
+      }
+      if (config && config.components && !config.page_components) {
+        config.page_components = config.components;
+      }
+      if (!config || typeof config !== 'object') {
+        config = {
+          icon: 'factory',
+          color: '#4CAF50',
+          page_components: [{ type: 'kpi_card_row', args: { cards: [] } }]
+        };
+      }
+      return {
         ...node,
         status: 'active' as const,
-        ui_config: uiConfig,
-      });
-    }
+        ui_config: config,
+      };
+    });
 
     // Step 4: Assemble the complete supply chain
     const supplyChain: SupplyChain = {

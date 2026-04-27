@@ -25,7 +25,7 @@ class DataGridWidget extends StatelessWidget {
               children: [
                 Icon(Icons.grid_view, color: accent, size: 20),
                 const SizedBox(width: 8),
-                const Text('Data', style: TextStyle(
+                Text('Data', style: TextStyle(
                   color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
                 )),
               ],
@@ -36,7 +36,7 @@ class DataGridWidget extends StatelessWidget {
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(AppTheme.bgSurface),
               columns: columns.map((col) => DataColumn(
-                label: Text(col, style: const TextStyle(
+                label: Text(col, style: TextStyle(
                   color: AppTheme.textMuted, fontWeight: FontWeight.w600, fontSize: 12,
                 )),
               )).toList(),
@@ -45,7 +45,7 @@ class DataGridWidget extends StatelessWidget {
                 return DataRow(
                   cells: List.generate(columns.length, (i) {
                     final val = i < values.length ? values[i].toString() : '—';
-                    return DataCell(Text(val, style: const TextStyle(
+                    return DataCell(Text(val, style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 13,
                     )));
                   }),

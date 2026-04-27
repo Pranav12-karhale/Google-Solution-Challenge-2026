@@ -199,3 +199,69 @@ class SupplyChainEdge {
     'metadata': metadata,
   };
 }
+
+// ============================================================
+// Disruption Models
+// ============================================================
+class DisruptionEvent {
+  final String id;
+  final String type;
+  final String severity;
+  final String description;
+  final List<String> affectedNodeIds;
+  final List<String> affectedEdgeIds;
+
+  DisruptionEvent({
+    required this.id,
+    required this.type,
+    required this.severity,
+    required this.description,
+    required this.affectedNodeIds,
+    required this.affectedEdgeIds,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type,
+    'severity': severity,
+    'description': description,
+    'affected_node_ids': affectedNodeIds,
+    'affected_edge_ids': affectedEdgeIds,
+    'timestamp': DateTime.now().toIso8601String(),
+  };
+}
+
+class MitigationAction {
+  final String id;
+  final String actionType;
+  final String description;
+  final num costImpact;
+  final num timeImpactDays;
+
+  MitigationAction({
+    required this.id,
+    required this.actionType,
+    required this.description,
+    required this.costImpact,
+    required this.timeImpactDays,
+  });
+
+  factory MitigationAction.fromJson(Map<String, dynamic> json) {
+    return MitigationAction(
+      id: json['id'] ?? '',
+      actionType: json['action_type'] ?? '',
+      description: json['description'] ?? '',
+      costImpact: json['cost_impact'] ?? 0,
+      timeImpactDays: json['time_impact_days'] ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'action_type': actionType,
+    'description': description,
+    'cost_impact': costImpact,
+    'time_impact_days': timeImpactDays,
+  };
+}
+

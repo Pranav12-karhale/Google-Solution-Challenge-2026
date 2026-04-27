@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/supply_chain_provider.dart';
+import '../widgets/settings_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +17,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final _ideaController = TextEditingController();
+  final _destinationController = TextEditingController();
+  Map<String, dynamic>? _clientLocation;
+  bool _isFetchingLocation = false;
+  bool _strictLocal = false;
+  String _chainScope = 'auto'; // 'auto', 'intra', 'inter'
+  String _displayStrategy = 'best_route'; // 'best_route', 'all_options'
   late AnimationController _bgAnimController;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
@@ -45,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _bgAnimController.dispose();
     _fadeController.dispose();
     _ideaController.dispose();
+    _destinationController.dispose();
     super.dispose();
   }
 
@@ -109,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.hub, color: Colors.white, size: 36),
+                        child: Icon(Icons.hub, color: Colors.white, size: 36),
                       ),
                       const SizedBox(height: 24),
 
@@ -182,6 +192,145 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 16),
 
+                            // Location controls
+                            Row(
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: _isFetchingLocation ? null : _fetchLocation,
+                                  icon: _isFetchingLocation
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : Icon(Icons.my_location, size: 16),
+                                  label: Text(
+                                    _clientLocation != null
+                                        ? '📍 ${_clientLocation!['address']}'
+                                        : 'Use My Location',
+                                    style: GoogleFonts.inter(fontSize: 13),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _clientLocation != null
+                                        ? AppTheme.accentTeal
+                                        : AppTheme.textMuted,
+                                    side: BorderSide(
+                                      color: _clientLocation != null
+                                          ? AppTheme.accentTeal.withAlpha(100)
+                                          : AppTheme.borderLight,
+                                    ),
+                                  ),
+                                ),
+                                if (_clientLocation != null) ...[
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    icon: Icon(Icons.close, size: 16),
+                                    onPressed: () => setState(() {
+                                      _clientLocation = null;
+                                      _strictLocal = false;
+                                    }),
+                                    tooltip: 'Clear location',
+                                    style: IconButton.styleFrom(
+                                      foregroundColor: AppTheme.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Chain Scope: Inter/Intra/Auto
+                            Text(
+                              '🌐 Supply Chain Scope',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                _ScopeChip(
+                                  label: 'Auto-detect',
+                                  icon: Icons.auto_awesome,
+                                  selected: _chainScope == 'auto',
+                                  onTap: () => setState(() => _chainScope = 'auto'),
+                                ),
+                                const SizedBox(width: 8),
+                                _ScopeChip(
+                                  label: 'Domestic',
+                                  icon: Icons.home,
+                                  selected: _chainScope == 'intra',
+                                  onTap: () => setState(() => _chainScope = 'intra'),
+                                ),
+                                const SizedBox(width: 8),
+                                _ScopeChip(
+                                  label: 'International',
+                                  icon: Icons.public,
+                                  selected: _chainScope == 'inter',
+                                  onTap: () => setState(() => _chainScope = 'inter'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Display Strategy: Best Route / All Options
+                            Text(
+                              '🎯 Display Strategy',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                _ScopeChip(
+                                  label: 'Best Route',
+                                  icon: Icons.route,
+                                  selected: _displayStrategy == 'best_route',
+                                  onTap: () => setState(() => _displayStrategy = 'best_route'),
+                                ),
+                                const SizedBox(width: 8),
+                                _ScopeChip(
+                                  label: 'All Options',
+                                  icon: Icons.account_tree,
+                                  selected: _displayStrategy == 'all_options',
+                                  onTap: () => setState(() => _displayStrategy = 'all_options'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Destination field
+                            Text(
+                              '📦 Destination (Optional)',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _destinationController,
+                              maxLines: 1,
+                              style: GoogleFonts.inter(
+                                color: AppTheme.textPrimary,
+                                fontSize: 15,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Where will your product be sold/delivered? e.g., Mumbai, London, Pan-India',
+                                filled: true,
+                                fillColor: AppTheme.bgDark,
+                                prefixIcon: Icon(Icons.place_outlined, size: 18),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+
                             // Generate button
                             SizedBox(
                               width: double.infinity,
@@ -223,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     : Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          const Icon(Icons.auto_awesome, size: 20),
+                                          Icon(Icons.auto_awesome, size: 20),
                                           const SizedBox(width: 8),
                                           Text(
                                             'Generate Supply Chain',
@@ -249,12 +398,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
+                                    Icon(Icons.error_outline, color: AppTheme.error, size: 18),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         provider.error!,
-                                        style: const TextStyle(color: AppTheme.error, fontSize: 13),
+                                        style: TextStyle(color: AppTheme.error, fontSize: 13),
                                       ),
                                     ),
                                   ],
@@ -341,7 +490,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: auth.photoUrl == null
                 ? Text(
                     auth.displayName[0].toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.accentBlue,
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -367,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 if (auth.email != null)
                   Text(
                     auth.email!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 11,
                     ),
@@ -378,9 +527,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           IconButton(
-            onPressed: () => auth.signOut(),
-            icon: const Icon(Icons.logout, size: 18),
-            tooltip: 'Sign out',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const SettingsDialog(),
+              );
+            },
+            icon: Icon(Icons.settings, size: 18),
+            tooltip: 'Settings',
             style: IconButton.styleFrom(
               foregroundColor: AppTheme.textMuted,
             ),
@@ -390,12 +544,114 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Future<void> _fetchLocation() async {
+    setState(() => _isFetchingLocation = true);
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permission denied');
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied, we cannot request permissions.');
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+      );
+
+      String address = '${position.latitude.toStringAsFixed(2)}, ${position.longitude.toStringAsFixed(2)}';
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+          address = '${place.locality ?? place.subAdministrativeArea}, ${place.administrativeArea}';
+        }
+      } catch (_) {
+        // Geocoding failed, fallback to coordinates
+      }
+
+      setState(() {
+        _clientLocation = {
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'address': address,
+        };
+        _strictLocal = true; // Default to true when location is fetched
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not fetch location: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isFetchingLocation = false);
+    }
+  }
+
   void _generate(SupplyChainProvider provider) {
     final idea = _ideaController.text.trim();
     if (idea.isEmpty) return;
+    final destination = _destinationController.text.trim();
+
+    // Determine strictLocal based on flowchart:
+    // - If location + no destination → local chain
+    // - If location + destination → best route
+    // - If no location → general chain
+    final isStrictLocal = _clientLocation != null && destination.isEmpty;
+
     Navigator.of(context).pushReplacementNamed(
       '/generating',
-      arguments: {'businessIdea': idea},
+      arguments: {
+        'businessIdea': idea,
+        if (_clientLocation != null) 'clientLocation': _clientLocation,
+        'strictLocal': isStrictLocal,
+        'chainScope': _chainScope,
+        if (destination.isNotEmpty) 'destination': destination,
+        'displayStrategy': _displayStrategy,
+      },
+    );
+  }
+}
+
+class _ScopeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ScopeChip({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accentBlue.withAlpha(30) : AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppTheme.accentBlue : AppTheme.borderColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: selected ? AppTheme.accentBlue : AppTheme.textMuted, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: GoogleFonts.inter(
+              color: selected ? AppTheme.accentBlue : AppTheme.textSecondary,
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            )),
+          ],
+        ),
+      ),
     );
   }
 }

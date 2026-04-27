@@ -5,6 +5,7 @@ import 'config/firebase_options.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/supply_chain_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/generating_screen.dart';
@@ -27,17 +28,24 @@ class AdaptiveSupplyChainApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => SupplyChainProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'Adaptive Supply Chain',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const _AuthGate(),
-        routes: {
-          '/auth': (context) => const AuthScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/generating': (context) => const GeneratingScreen(),
-          '/chain': (context) => const ChainScreen(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Adaptive Supply Chain',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: const _AuthGate(),
+            routes: {
+              '/auth': (context) => const AuthScreen(),
+              '/home': (context) => const HomeScreen(),
+              '/generating': (context) => const GeneratingScreen(),
+              '/chain': (context) => const ChainScreen(),
+            },
+          );
         },
       ),
     );

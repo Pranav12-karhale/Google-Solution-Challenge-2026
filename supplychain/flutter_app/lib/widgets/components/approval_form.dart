@@ -37,7 +37,7 @@ class _ApprovalFormState extends State<ApprovalForm> {
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -59,14 +59,14 @@ class _ApprovalFormState extends State<ApprovalForm> {
                   children: [
                     Icon(Icons.check_circle, color: AppTheme.success),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       'Form submitted successfully!',
                       style: TextStyle(color: AppTheme.success),
                     ),
                     const Spacer(),
                     TextButton(
                       onPressed: () => setState(() => _submitted = false),
-                      child: const Text('Reset'),
+                      child: Text('Reset'),
                     ),
                   ],
                 ),
@@ -107,7 +107,7 @@ class _ApprovalFormState extends State<ApprovalForm> {
         return DropdownButtonFormField<String>(
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: const TextStyle(color: AppTheme.textMuted),
+            labelStyle: TextStyle(color: AppTheme.textMuted),
           ),
           dropdownColor: AppTheme.bgCard,
           items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
@@ -120,7 +120,7 @@ class _ApprovalFormState extends State<ApprovalForm> {
           maxLines: 3,
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: const TextStyle(color: AppTheme.textMuted),
+            labelStyle: TextStyle(color: AppTheme.textMuted),
             alignLabelWithHint: true,
           ),
           onChanged: (v) => _formData[name] = v,
@@ -129,7 +129,7 @@ class _ApprovalFormState extends State<ApprovalForm> {
 
       case 'checkbox':
         return CheckboxListTile(
-          title: Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          title: Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
           value: _formData[name] == true,
           activeColor: accent,
           onChanged: (v) => setState(() => _formData[name] = v),
@@ -142,7 +142,7 @@ class _ApprovalFormState extends State<ApprovalForm> {
         return TextFormField(
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: const TextStyle(color: AppTheme.textMuted),
+            labelStyle: TextStyle(color: AppTheme.textMuted),
           ),
           onChanged: (v) => _formData[name] = v,
           validator: required_ ? (v) => v?.isEmpty == true ? 'Required' : null : null,

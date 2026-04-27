@@ -75,9 +75,13 @@ class _GeneratingScreenState extends State<GeneratingScreen>
   }
 
   void _startGeneration() async {
-    final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
-    final idea = args?['businessIdea'] ?? '';
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final idea = args?['businessIdea'] as String? ?? '';
+    final clientLocation = args?['clientLocation'] as Map<String, dynamic>?;
+    final strictLocal = args?['strictLocal'] as bool? ?? false;
+    final chainScope = args?['chainScope'] as String? ?? 'auto';
+    final destination = args?['destination'] as String?;
+    final displayStrategy = args?['displayStrategy'] as String? ?? 'best_route';
 
     if (idea.isEmpty) {
       if (mounted) Navigator.of(context).pushReplacementNamed('/');
@@ -85,7 +89,14 @@ class _GeneratingScreenState extends State<GeneratingScreen>
     }
 
     final provider = context.read<SupplyChainProvider>();
-    await provider.generateChain(idea);
+    await provider.generateChain(
+      idea,
+      clientLocation: clientLocation,
+      strictLocal: strictLocal,
+      chainScope: chainScope,
+      destination: destination,
+      displayStrategy: displayStrategy,
+    );
 
     if (!mounted || _hasNavigated) return;
     _hasNavigated = true;
@@ -210,7 +221,7 @@ class _GeneratingScreenState extends State<GeneratingScreen>
                               ),
                               child: Container(
                                 margin: const EdgeInsets.all(3),
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: AppTheme.bgDark,
                                 ),
@@ -240,7 +251,7 @@ class _GeneratingScreenState extends State<GeneratingScreen>
                                   ),
                                 ],
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.hub,
                                 color: Colors.white,
                                 size: 26,
@@ -336,7 +347,7 @@ class _GeneratingScreenState extends State<GeneratingScreen>
                     _hasNavigated = true;
                     Navigator.of(context).pushReplacementNamed('/');
                   },
-                  icon: const Icon(Icons.arrow_back, size: 16),
+                  icon: Icon(Icons.arrow_back, size: 16),
                   label: Text(
                     'Cancel',
                     style: GoogleFonts.inter(fontSize: 14),

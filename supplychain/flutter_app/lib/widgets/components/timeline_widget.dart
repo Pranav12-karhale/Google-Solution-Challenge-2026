@@ -23,7 +23,7 @@ class TimelineWidget extends StatelessWidget {
             children: [
               Icon(Icons.history, color: accent, size: 20),
               const SizedBox(width: 8),
-              const Text('Timeline', style: TextStyle(
+              Text('Timeline', style: TextStyle(
                 color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600,
               )),
             ],
@@ -73,7 +73,7 @@ class TimelineWidget extends StatelessWidget {
                         children: [
                           Text(
                             item['event'] ?? '',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -83,7 +83,7 @@ class TimelineWidget extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               item['date'].toString(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textMuted,
                                 fontSize: 11,
                               ),

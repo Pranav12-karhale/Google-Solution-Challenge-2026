@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/supply_chain.dart';
+import '../models/risk_models.dart';
 import 'auth_service.dart';
 
 class ApiService {
@@ -29,11 +30,27 @@ class ApiService {
   }
 
   /// Generate a new supply chain from a business idea
-  static Future<SupplyChain> generateSupplyChain(String businessIdea) async {
+  static Future<SupplyChain> generateSupplyChain(
+    String businessIdea, {
+    Map<String, dynamic>? clientLocation,
+    bool strictLocal = false,
+    String chainScope = 'auto',
+    String? destination,
+    String displayStrategy = 'best_route',
+  }) async {
+    final body = {
+      'businessIdea': businessIdea,
+      if (clientLocation != null) 'clientLocation': clientLocation,
+      if (strictLocal) 'strictLocal': strictLocal,
+      'chainScope': chainScope,
+      if (destination != null && destination.isNotEmpty) 'destination': destination,
+      'displayStrategy': displayStrategy,
+    };
+
     final response = await http.post(
       Uri.parse('$baseUrl/generate'),
       headers: await _headers(),
-      body: jsonEncode({'businessIdea': businessIdea}),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode == 200) {
@@ -87,6 +104,86 @@ class ApiService {
       return jsonDecode(response.body);
     }
     throw Exception('Failed to add node');
+  }
+
+  /// Trigger a disruption event
+  static Future<SupplyChain> triggerDisruption(String chainId, DisruptionEvent event) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chains/$chainId/disruptions/trigger'),
+      headers: await _headers(),
+      body: jsonEncode(event.toJson()),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return SupplyChain.fromJson(data['supply_chain']);
+    }
+    throw Exception('Failed to trigger disruption');
+  }
+
+  /// Get AI mitigation plan for disruption
+  static Future<MitigationAction> resolveDisruption(String chainId, DisruptionEvent event) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chains/$chainId/disruptions/resolve'),
+      headers: await _headers(),
+      body: jsonEncode(event.toJson()),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return MitigationAction.fromJson(data['mitigation']);
+    }
+    throw Exception('Failed to resolve disruption');
+  }
+
+  /// Execute mitigation plan
+  static Future<SupplyChain> executeMitigation(String chainId, MitigationAction action) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chains/$chainId/disruptions/execute'),
+      headers: await _headers(),
+      body: jsonEncode({
+        ...action.toJson(),
+        'id': action.id,
+        'action_type': action.actionType,
+        'description': action.description,
+        'cost_impact': action.costImpact,
+        'time_impact_days': action.timeImpactDays,
+      }), // Just pass required fields back, or the full JSON if available
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return SupplyChain.fromJson(data['supply_chain']);
+    }
+    throw Exception('Failed to execute mitigation');
+  }
+
+  /// Run AI risk scan on the supply chain
+  static Future<RiskReport> scanRisks(String chainId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chains/$chainId/risk-scan'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return RiskReport.fromJson(data['report']);
+    }
+    throw Exception('Failed to scan risks');
+  }
+
+  /// Get cached risk report
+  static Future<RiskReport> getRiskReport(String chainId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/chains/$chainId/risk-report'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return RiskReport.fromJson(data['report']);
+    }
+    throw Exception('No risk report available');
   }
 
   /// Health check
