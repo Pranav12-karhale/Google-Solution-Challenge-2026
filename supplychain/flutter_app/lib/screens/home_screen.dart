@@ -130,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ShaderMask(
                         shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
                         child: Text(
-                          'Adaptive Supply Chain',
+                          'Resilia',
                           style: GoogleFonts.outfit(
                             fontSize: 36,
                             fontWeight: FontWeight.w800,
