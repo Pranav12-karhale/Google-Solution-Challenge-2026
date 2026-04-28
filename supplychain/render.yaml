@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: adaptive-supply-chain-backend
+    env: node
+    rootDir: backend/functions
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.x
+      - key: GOOGLE_GENAI_API_KEY
+        sync: false # User needs to paste this in Render dashboard
+      - key: FIREBASE_PROJECT_ID
+        sync: false # User needs to paste this in Render dashboard

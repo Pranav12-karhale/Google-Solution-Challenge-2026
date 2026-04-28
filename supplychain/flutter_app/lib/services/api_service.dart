@@ -8,6 +8,10 @@ import 'auth_service.dart';
 class ApiService {
   // Use localhost for web, 10.0.2.2 for Android emulator
   static String get baseUrl {
+    if (kReleaseMode) {
+      // Production backend URL (Render)
+      return 'https://adaptive-supply-chain-backend.onrender.com/api';
+    }
     if (kIsWeb) {
       return 'http://localhost:3001/api';
     }

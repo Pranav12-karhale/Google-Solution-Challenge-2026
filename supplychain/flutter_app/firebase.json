@@ -1,1 +1,31 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"supply-chain-gen-man","appId":"1:327127186487:android:66116d0c82e22ac44713b2","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"supply-chain-gen-man","configurations":{"android":"1:327127186487:android:66116d0c82e22ac44713b2","web":"1:327127186487:web:3ab03bb711f343ac4713b2","windows":"1:327127186487:web:93994059e9d6ada54713b2"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "supply-chain-gen-man",
+          "appId": "1:327127186487:android:66116d0c82e22ac44713b2",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "supply-chain-gen-man",
+          "configurations": {
+            "android": "1:327127186487:android:66116d0c82e22ac44713b2",
+            "web": "1:327127186487:web:3ab03bb711f343ac4713b2",
+            "windows": "1:327127186487:web:93994059e9d6ada54713b2"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
