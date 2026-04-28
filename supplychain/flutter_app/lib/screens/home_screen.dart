@@ -583,13 +583,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      if (position == null) {
-        throw Exception('Could not determine location.');
-      }
-
-      String address = '${position.latitude.toStringAsFixed(2)}, ${position.longitude.toStringAsFixed(2)}';
+      final pos = position!;
+      String address = '${pos.latitude.toStringAsFixed(2)}, ${pos.longitude.toStringAsFixed(2)}';
       try {
-        List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+        List<Placemark> placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
         if (placemarks.isNotEmpty) {
           final place = placemarks.first;
           address = '${place.locality ?? place.subAdministrativeArea}, ${place.administrativeArea}';
@@ -600,8 +597,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       setState(() {
         _clientLocation = {
-          'lat': position.latitude,
-          'lng': position.longitude,
+          'lat': pos.latitude,
+          'lng': pos.longitude,
           'address': address,
         };
         _originController.text = address;

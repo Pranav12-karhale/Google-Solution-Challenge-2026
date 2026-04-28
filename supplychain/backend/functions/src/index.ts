@@ -325,9 +325,9 @@ app.get('/api/chains', async (req: express.Request, res: express.Response) => {
   const chains = chainsData.map(c => ({
     id: c.id,
     name: c.name,
-    business_idea: c.businessIdea || (c as any).business_idea,
+    business_idea: (c as any).businessIdea || c.business_idea,
     status: c.status,
-    created_at: c.createdAt || (c as any).created_at,
+    created_at: (c as any).createdAt || c.created_at,
     node_count: c.nodes.length,
   }));
   res.json({ chains });
