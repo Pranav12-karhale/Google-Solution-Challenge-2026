@@ -1,6 +1,7 @@
 services:
   - type: web
     name: adaptive-supply-chain-backend
+    plan: free
     env: node
     rootDir: backend/functions
     buildCommand: npm install && npm run build
