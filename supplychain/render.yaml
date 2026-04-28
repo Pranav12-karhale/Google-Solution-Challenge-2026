@@ -3,7 +3,7 @@ services:
     name: adaptive-supply-chain-backend
     plan: free
     env: node
-    rootDir: backend/functions
+    rootDir: supplychain/backend/functions
     buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
