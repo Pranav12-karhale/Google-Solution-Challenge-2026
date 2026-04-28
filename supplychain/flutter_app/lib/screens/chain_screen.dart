@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../models/supply_chain.dart';
 import '../models/risk_models.dart';
@@ -679,6 +680,25 @@ class _ChainScreenState extends State<ChainScreen> with TickerProviderStateMixin
               ),
             ],
 
+            if (node.metadata['coordinates'] != null &&
+                !(node.metadata['location']?.toString().contains('In Transit') ?? false) &&
+                !node.name.contains('In Transit') &&
+                !(node.metadata['coordinates']['lat'] == 0 && node.metadata['coordinates']['lng'] == 0)) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => _launchMap(context, provider.currentChain!, node),
+                icon: const Icon(Icons.map, size: 18),
+                label: const Text('View Map on Google Maps'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: nodeColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
 
             // Risk Assessment (if available)
@@ -715,6 +735,65 @@ class _ChainScreenState extends State<ChainScreen> with TickerProviderStateMixin
         ),
       ),
     );
+  }
+
+  Future<void> _launchMap(BuildContext context, SupplyChain chain, SupplyChainNode node) async {
+    final uniqueOrders = chain.nodes.map((n) => n.order).toSet().length;
+    final bool isAllOptions = chain.nodes.length > uniqueOrders;
+    
+    if (isAllOptions) {
+      // For all options: plot entire chain
+      final validNodes = chain.nodes.where((n) {
+        final loc = n.metadata['location']?.toString() ?? '';
+        final name = n.name;
+        if (loc.contains('In Transit') || name.contains('In Transit')) return false;
+        
+        final coords = n.metadata['coordinates'];
+        if (coords == null || coords['lat'] == null || coords['lng'] == null) return false;
+        if (coords['lat'] == 0 && coords['lng'] == 0) return false;
+        
+        return true;
+      }).toList();
+      
+      validNodes.sort((a, b) => a.order.compareTo(b.order));
+      
+      if (validNodes.length >= 2) {
+        final origin = validNodes.first.metadata['coordinates'];
+        final destination = validNodes.last.metadata['coordinates'];
+        
+        final waypoints = validNodes.sublist(1, validNodes.length - 1).map((n) {
+          final c = n.metadata['coordinates'];
+          return '${c['lat']},${c['lng']}';
+        }).join('|');
+        
+        String url = 'https://www.google.com/maps/dir/?api=1&origin=${origin['lat']},${origin['lng']}&destination=${destination['lat']},${destination['lng']}';
+        if (waypoints.isNotEmpty) {
+          url += '&waypoints=$waypoints';
+        }
+        
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      } else if (validNodes.isNotEmpty) {
+        final c = validNodes.first.metadata['coordinates'];
+        final url = 'https://www.google.com/maps/search/?api=1&query=${c['lat']},${c['lng']}';
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      }
+    } else {
+      // Best route: show specific node
+      final coords = node.metadata['coordinates'];
+      if (coords != null) {
+        final url = 'https://www.google.com/maps/search/?api=1&query=${coords['lat']},${coords['lng']}';
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      }
+    }
   }
 
   void _showDisruptionTriggerDialog(BuildContext context, SupplyChainProvider provider, SupplyChain chain) {

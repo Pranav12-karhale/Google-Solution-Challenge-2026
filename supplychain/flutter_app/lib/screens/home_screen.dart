@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final _ideaController = TextEditingController();
   final _destinationController = TextEditingController();
+  final _originController = TextEditingController();
   Map<String, dynamic>? _clientLocation;
   bool _isFetchingLocation = false;
   bool _strictLocal = false;
@@ -55,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _fadeController.dispose();
     _ideaController.dispose();
     _destinationController.dispose();
+    _originController.dispose();
     super.dispose();
   }
 
@@ -192,50 +195,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 16),
 
-                            // Location controls
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: _isFetchingLocation ? null : _fetchLocation,
-                                  icon: _isFetchingLocation
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : Icon(Icons.my_location, size: 16),
-                                  label: Text(
-                                    _clientLocation != null
-                                        ? '📍 ${_clientLocation!['address']}'
-                                        : 'Use My Location',
-                                    style: GoogleFonts.inter(fontSize: 13),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: _clientLocation != null
-                                        ? AppTheme.accentTeal
-                                        : AppTheme.textMuted,
-                                    side: BorderSide(
-                                      color: _clientLocation != null
-                                          ? AppTheme.accentTeal.withAlpha(100)
-                                          : AppTheme.borderLight,
-                                    ),
-                                  ),
-                                ),
-                                if (_clientLocation != null) ...[
-                                  const SizedBox(width: 12),
-                                  IconButton(
-                                    icon: Icon(Icons.close, size: 16),
-                                    onPressed: () => setState(() {
-                                      _clientLocation = null;
-                                      _strictLocal = false;
-                                    }),
-                                    tooltip: 'Clear location',
-                                    style: IconButton.styleFrom(
-                                      foregroundColor: AppTheme.textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ],
+                            // Origin field
+                            Text(
+                              '📍 Origin (Optional)',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _originController,
+                              maxLines: 1,
+                              style: GoogleFonts.inter(
+                                color: AppTheme.textPrimary,
+                                fontSize: 15,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Where does the supply chain start? e.g., Tokyo, Japan',
+                                filled: true,
+                                fillColor: AppTheme.bgDark,
+                                prefixIcon: Icon(Icons.my_location, size: 18),
+                                suffixIcon: _isFetchingLocation
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(14.0),
+                                        child: SizedBox(
+                                          width: 16, height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2)
+                                        ),
+                                      )
+                                    : IconButton(
+                                        icon: Icon(Icons.gps_fixed, color: AppTheme.accentTeal),
+                                        tooltip: 'Use my current location',
+                                        onPressed: _fetchLocation,
+                                      ),
+                              ),
+                              onChanged: (_) => setState(() {
+                                _clientLocation = null; // Clear exact lat/lng if user edits manually
+                              }),
                             ),
                             const SizedBox(height: 16),
 
@@ -559,9 +557,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         throw Exception('Location permissions are permanently denied, we cannot request permissions.');
       }
 
-      Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
-      );
+      Position? position = await Geolocator.getLastKnownPosition();
+      
+      try {
+        // Try to get a fresh, highly accurate position
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 6),
+          ),
+        );
+      } catch (e) {
+        if (e is TimeoutException) {
+          // If high accuracy timed out and we have no last known position, force a fast low-accuracy fix
+          if (position == null) {
+            position = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.low,
+                timeLimit: Duration(seconds: 4),
+              ),
+            );
+          }
+        } else {
+          rethrow;
+        }
+      }
+
+      if (position == null) {
+        throw Exception('Could not determine location.');
+      }
 
       String address = '${position.latitude.toStringAsFixed(2)}, ${position.longitude.toStringAsFixed(2)}';
       try {
@@ -580,6 +604,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           'lng': position.longitude,
           'address': address,
         };
+        _originController.text = address;
         _strictLocal = true; // Default to true when location is fetched
       });
     } catch (e) {
@@ -598,17 +623,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (idea.isEmpty) return;
     final destination = _destinationController.text.trim();
 
+    final originText = _originController.text.trim();
+    final clientLoc = _clientLocation ?? (originText.isNotEmpty 
+        ? { 'address': originText }
+        : null);
+
     // Determine strictLocal based on flowchart:
     // - If location + no destination → local chain
     // - If location + destination → best route
     // - If no location → general chain
-    final isStrictLocal = _clientLocation != null && destination.isEmpty;
+    final isStrictLocal = clientLoc != null && destination.isEmpty;
 
     Navigator.of(context).pushReplacementNamed(
       '/generating',
       arguments: {
         'businessIdea': idea,
-        if (_clientLocation != null) 'clientLocation': _clientLocation,
+        if (clientLoc != null) 'clientLocation': clientLoc,
         'strictLocal': isStrictLocal,
         'chainScope': _chainScope,
         if (destination.isNotEmpty) 'destination': destination,

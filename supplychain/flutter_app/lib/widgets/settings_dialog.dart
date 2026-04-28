@@ -1,18 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/supply_chain_provider.dart';
 import '../config/theme.dart';
 
-class SettingsDialog extends StatelessWidget {
+class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key});
+
+  @override
+  State<SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<SettingsDialog> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch the latest history when the dialog opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SupplyChainProvider>().refreshChainList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final authProvider = context.watch<AuthProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final supplyChainProvider = context.watch<SupplyChainProvider>();
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -126,6 +142,11 @@ class SettingsDialog extends StatelessWidget {
                         child: Text('Sign Out'),
                       ),
                     ),
+
+                    const SizedBox(height: 32),
+                    _buildSectionTitle('History'),
+                    const SizedBox(height: 16),
+                    _buildHistorySection(context, supplyChainProvider),
 
                     const SizedBox(height: 32),
                     _buildSectionTitle('About'),
@@ -284,6 +305,76 @@ class SettingsDialog extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHistorySection(BuildContext context, SupplyChainProvider provider) {
+    if (provider.chainList.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Text(
+            'No history available.',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: provider.chainList.map((chain) {
+        final createdAt = DateTime.tryParse(chain['created_at'] ?? '');
+        final formattedDate = createdAt != null 
+            ? DateFormat('MMM d, yyyy, h:mm a').format(createdAt) 
+            : 'Unknown Date';
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.bgSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            title: Text(
+              chain['name'] ?? 'Unnamed Chain',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  chain['business_idea'] ?? '',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Created: $formattedDate',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                    ),
+                    Text(
+                      'Nodes: ${chain['node_count'] ?? 0}',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            trailing: Icon(Icons.chevron_right, color: AppTheme.textMuted),
+            onTap: () {
+              provider.loadChain(chain['id']);
+              Navigator.pop(context); // Close dialog
+            },
+          ),
+        );
+      }).toList(),
     );
   }
 }

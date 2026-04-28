@@ -9,6 +9,7 @@ dotenv.config();
 
 // ── Firebase Admin initialization ────────────────────────────────
 // Uses Application Default Credentials (ADC) or GOOGLE_APPLICATION_CREDENTIALS
+let db: admin.firestore.Firestore | null = null;
 try {
   admin.initializeApp({
     // If running locally without ADC, it initializes with limited functionality
@@ -16,6 +17,10 @@ try {
     projectId: process.env.FIREBASE_PROJECT_ID || undefined,
   });
   console.log('🔐 Firebase Admin initialized');
+  if (process.env.FIREBASE_PROJECT_ID) {
+    db = admin.firestore();
+    console.log('🔥 Firestore initialized for permanent history');
+  }
 } catch (err: any) {
   console.warn('⚠️  Firebase Admin init failed:', err.message);
   console.warn('   Auth middleware will pass through (dev mode)');
@@ -71,11 +76,102 @@ const authMiddleware = async (
 
 app.use(authMiddleware);
 
-// In-memory store (simulates Firestore)
+// In-memory store (simulates Firestore fallback)
 const supplyChains: Map<string, SupplyChain> = new Map();
 const riskReports: Map<string, RiskReport> = new Map();
 
 const USE_AI = !!process.env.GOOGLE_GENAI_API_KEY;
+
+// ── Database Helpers ──────────────────────────────────────────────
+async function saveChain(chain: SupplyChain, uid?: string) {
+  if (db && uid) {
+    try {
+      await db.collection('supply_chains').doc(chain.id).set({ ...chain, userId: uid });
+      return;
+    } catch (err: any) {
+      console.warn('⚠️ Failed to save to Firestore:', err.message);
+    }
+  }
+  supplyChains.set(chain.id, chain);
+}
+
+async function getChains(uid?: string) {
+  if (db && uid) {
+    try {
+      const snapshot = await db.collection('supply_chains').where('userId', '==', uid).get();
+      return snapshot.docs.map(doc => doc.data() as SupplyChain);
+    } catch (err: any) {
+      console.warn('⚠️ Failed to fetch from Firestore:', err.message);
+    }
+  }
+  return Array.from(supplyChains.values());
+}
+
+async function getChain(id: string, uid?: string) {
+  if (db) {
+    try {
+      const doc = await db.collection('supply_chains').doc(id).get();
+      if (doc.exists) {
+        const data = doc.data() as any;
+        if (uid && data.userId !== uid && process.env.FIREBASE_PROJECT_ID) {
+          return null; // unauthorized
+        }
+        return data as SupplyChain;
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('⚠️ Failed to fetch from Firestore:', err.message);
+    }
+  }
+  return supplyChains.get(id);
+}
+
+async function deleteChain(id: string, uid?: string) {
+  if (db && uid) {
+    try {
+      const doc = await db.collection('supply_chains').doc(id).get();
+      if (doc.exists && doc.data()?.userId === uid) {
+        await db.collection('supply_chains').doc(id).delete();
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.warn('⚠️ Failed to delete from Firestore:', err.message);
+    }
+  }
+  return supplyChains.delete(id);
+}
+
+async function saveRiskReport(report: RiskReport, uid?: string) {
+  if (db && uid) {
+    try {
+      await db.collection('risk_reports').doc(report.chain_id).set({ ...report, userId: uid });
+      return;
+    } catch (err: any) {
+      console.warn('⚠️ Failed to save risk report to Firestore:', err.message);
+    }
+  }
+  riskReports.set(report.chain_id, report);
+}
+
+async function getRiskReport(chainId: string, uid?: string) {
+  if (db) {
+    try {
+      const doc = await db.collection('risk_reports').doc(chainId).get();
+      if (doc.exists) {
+        const data = doc.data() as any;
+        if (uid && data.userId !== uid && process.env.FIREBASE_PROJECT_ID) {
+          return null; // unauthorized
+        }
+        return data as RiskReport;
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('⚠️ Failed to fetch risk report from Firestore:', err.message);
+    }
+  }
+  return riskReports.get(chainId);
+}
 
 // ============================================================
 // POST /api/generate - Generate supply chain from business idea
@@ -166,8 +262,8 @@ app.post('/api/generate', async (req, res) => {
       patchMockDataLocation(chain, clientLocation, destination, strictLocal);
     }
 
-    // Store in memory
-    supplyChains.set(chain.id, chain);
+    // Store in database
+    await saveChain(chain, (req as any).uid);
 
     console.log(`✅ Generated chain: ${chain.name} (${chain.nodes.length} nodes, ${chain.edges.length} edges)`);
     chain.nodes.forEach(n => console.log(`   📦 ${n.name} (${n.type}) — ${n.ui_config.page_components.length} components`));
@@ -224,13 +320,14 @@ function patchMockDataLocation(chain: SupplyChain, clientLocation: any, destinat
 // ============================================================
 // GET /api/chains - List all supply chains
 // ============================================================
-app.get('/api/chains', (req: express.Request, res: express.Response) => {
-  const chains = Array.from(supplyChains.values()).map(c => ({
+app.get('/api/chains', async (req: express.Request, res: express.Response) => {
+  const chainsData = await getChains((req as any).uid);
+  const chains = chainsData.map(c => ({
     id: c.id,
     name: c.name,
-    business_idea: c.business_idea,
+    business_idea: c.businessIdea || (c as any).business_idea,
     status: c.status,
-    created_at: c.created_at,
+    created_at: c.createdAt || (c as any).created_at,
     node_count: c.nodes.length,
   }));
   res.json({ chains });
@@ -239,8 +336,8 @@ app.get('/api/chains', (req: express.Request, res: express.Response) => {
 // ============================================================
 // GET /api/chains/:id - Get full supply chain with nodes
 // ============================================================
-app.get('/api/chains/:id', (req: express.Request, res: express.Response) => {
-  const chain = supplyChains.get(req.params.id as string);
+app.get('/api/chains/:id', async (req: express.Request, res: express.Response) => {
+  const chain = await getChain(req.params.id as string, (req as any).uid);
   if (!chain) {
     res.status(404).json({ error: 'Supply chain not found' });
     return;
@@ -251,8 +348,8 @@ app.get('/api/chains/:id', (req: express.Request, res: express.Response) => {
 // ============================================================
 // GET /api/chains/:chainId/nodes/:nodeId - Get single node
 // ============================================================
-app.get('/api/chains/:chainId/nodes/:nodeId', (req: express.Request, res: express.Response) => {
-  const chain = supplyChains.get(req.params.chainId as string);
+app.get('/api/chains/:chainId/nodes/:nodeId', async (req: express.Request, res: express.Response) => {
+  const chain = await getChain(req.params.chainId as string, (req as any).uid);
   if (!chain) {
     res.status(404).json({ error: 'Supply chain not found' });
     return;
@@ -271,7 +368,7 @@ app.get('/api/chains/:chainId/nodes/:nodeId', (req: express.Request, res: expres
 // ============================================================
 app.post('/api/chains/:id/add-node', async (req: express.Request, res: express.Response) => {
   try {
-    const chain = supplyChains.get(req.params.id as string);
+    const chain = await getChain(req.params.id as string, (req as any).uid);
     if (!chain) {
       res.status(404).json({ error: 'Supply chain not found' });
       return;
@@ -345,6 +442,8 @@ app.post('/api/chains/:id/add-node', async (req: express.Request, res: express.R
     };
     chain.edges.push(newEdge);
 
+    await saveChain(chain, (req as any).uid);
+
     console.log(`✅ Added crisis node: ${newNode.name}`);
 
     res.json({ success: true, node: newNode, edge: newEdge });
@@ -357,8 +456,9 @@ app.post('/api/chains/:id/add-node', async (req: express.Request, res: express.R
 // ============================================================
 // DELETE /api/chains/:id - Delete a supply chain
 // ============================================================
-app.delete('/api/chains/:id', (req: express.Request, res: express.Response) => {
-  if (supplyChains.delete(req.params.id as string)) {
+app.delete('/api/chains/:id', async (req: express.Request, res: express.Response) => {
+  const success = await deleteChain(req.params.id as string, (req as any).uid);
+  if (success) {
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Supply chain not found' });
@@ -368,8 +468,8 @@ app.delete('/api/chains/:id', (req: express.Request, res: express.Response) => {
 // ============================================================
 // POST /api/chains/:id/disruptions/trigger - Trigger a disruption
 // ============================================================
-app.post('/api/chains/:id/disruptions/trigger', (req: express.Request, res: express.Response) => {
-  const chain = supplyChains.get(req.params.id as string);
+app.post('/api/chains/:id/disruptions/trigger', async (req: express.Request, res: express.Response) => {
+  const chain = await getChain(req.params.id as string, (req as any).uid);
   if (!chain) {
     res.status(404).json({ error: 'Supply chain not found' });
     return;
@@ -387,6 +487,8 @@ app.post('/api/chains/:id/disruptions/trigger', (req: express.Request, res: expr
   
   chain.status = 'disrupted';
   
+  await saveChain(chain, (req as any).uid);
+  
   res.json({ success: true, supply_chain: chain });
 });
 
@@ -395,7 +497,7 @@ app.post('/api/chains/:id/disruptions/trigger', (req: express.Request, res: expr
 // ============================================================
 app.post('/api/chains/:id/disruptions/resolve', async (req: express.Request, res: express.Response) => {
   try {
-    const chain = supplyChains.get(req.params.id as string);
+    const chain = await getChain(req.params.id as string, (req as any).uid);
     if (!chain) {
       res.status(404).json({ error: 'Supply chain not found' });
       return;
@@ -428,8 +530,8 @@ app.post('/api/chains/:id/disruptions/resolve', async (req: express.Request, res
 // ============================================================
 // POST /api/chains/:id/disruptions/execute - Execute Mitigation
 // ============================================================
-app.post('/api/chains/:id/disruptions/execute', (req: express.Request, res: express.Response) => {
-  const chain = supplyChains.get(req.params.id as string);
+app.post('/api/chains/:id/disruptions/execute', async (req: express.Request, res: express.Response) => {
+  const chain = await getChain(req.params.id as string, (req as any).uid);
   if (!chain) {
     res.status(404).json({ error: 'Supply chain not found' });
     return;
@@ -468,6 +570,8 @@ app.post('/api/chains/:id/disruptions/execute', (req: express.Request, res: expr
     if (n.status === 'critical') n.status = 'active'; // Reset critical nodes for simplicity
   });
 
+  await saveChain(chain, (req as any).uid);
+
   res.json({ success: true, supply_chain: chain });
 });
 
@@ -476,7 +580,7 @@ app.post('/api/chains/:id/disruptions/execute', (req: express.Request, res: expr
 // ============================================================
 app.post('/api/chains/:id/risk-scan', async (req: express.Request, res: express.Response) => {
   try {
-    const chain = supplyChains.get(req.params.id as string);
+    const chain = await getChain(req.params.id as string, (req as any).uid);
     if (!chain) {
       res.status(404).json({ error: 'Supply chain not found' });
       return;
@@ -545,7 +649,10 @@ app.post('/api/chains/:id/risk-scan', async (req: express.Request, res: express.
     }
 
     // Cache the report
-    riskReports.set(chain.id, report);
+    await saveRiskReport(report, (req as any).uid);
+
+    // Save updated chain with new risk scores
+    await saveChain(chain, (req as any).uid);
 
     console.log(`✅ Risk scan complete. Overall chain risk: ${report.overall_chain_risk}/10`);
     res.json({ success: true, report });
@@ -558,8 +665,8 @@ app.post('/api/chains/:id/risk-scan', async (req: express.Request, res: express.
 // ============================================================
 // GET /api/chains/:id/risk-report - Get cached risk report
 // ============================================================
-app.get('/api/chains/:id/risk-report', (req: express.Request, res: express.Response) => {
-  const report = riskReports.get(req.params.id as string);
+app.get('/api/chains/:id/risk-report', async (req: express.Request, res: express.Response) => {
+  const report = await getRiskReport(req.params.id as string, (req as any).uid);
   if (!report) {
     res.status(404).json({ error: 'No risk report found. Run a risk scan first.' });
     return;
